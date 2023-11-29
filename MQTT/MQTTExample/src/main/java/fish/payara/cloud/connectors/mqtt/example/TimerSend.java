@@ -6,11 +6,11 @@ package fish.payara.cloud.connectors.mqtt.example;
 
 import fish.payara.cloud.connectors.mqtt.api.MQTTConnection;
 import fish.payara.cloud.connectors.mqtt.api.MQTTConnectionFactory;
-import jakarta.annotation.Resource;
-import jakarta.ejb.Stateless;
-import jakarta.ejb.Schedule;
-import jakarta.resource.ConnectionFactoryDefinition;
-import jakarta.resource.spi.TransactionSupport;
+import javax.annotation.Resource;
+import javax.ejb.Stateless;
+import javax.ejb.Schedule;
+import javax.resource.ConnectionFactoryDefinition;
+import javax.resource.spi.TransactionSupport;
 
 /**
  *

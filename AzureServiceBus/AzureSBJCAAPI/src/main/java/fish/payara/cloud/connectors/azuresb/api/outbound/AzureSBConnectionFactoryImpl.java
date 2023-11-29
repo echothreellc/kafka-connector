@@ -43,8 +43,8 @@ import fish.payara.cloud.connectors.azuresb.api.AzureSBConnection;
 import fish.payara.cloud.connectors.azuresb.api.AzureSBConnectionFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import jakarta.resource.ResourceException;
-import jakarta.resource.spi.ConnectionManager;
+import javax.resource.ResourceException;
+import javax.resource.spi.ConnectionManager;
 
 /**
  *

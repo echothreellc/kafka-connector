@@ -39,7 +39,7 @@
  */
 package fish.payara.cloud.connectors.kafka.inbound;
 
-import jakarta.resource.spi.work.Work;
+import javax.resource.spi.work.Work;
 
 /**
  *

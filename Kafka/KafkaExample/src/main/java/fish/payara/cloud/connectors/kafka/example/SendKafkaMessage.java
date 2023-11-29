@@ -43,11 +43,11 @@ import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import jakarta.annotation.Resource;
-import jakarta.ejb.Schedule;
-import jakarta.ejb.Stateless;
-import jakarta.resource.ConnectionFactoryDefinition;
-import jakarta.resource.spi.TransactionSupport.TransactionSupportLevel;
+import javax.annotation.Resource;
+import javax.ejb.Schedule;
+import javax.ejb.Stateless;
+import javax.resource.ConnectionFactoryDefinition;
+import javax.resource.spi.TransactionSupport.TransactionSupportLevel;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
 /**
