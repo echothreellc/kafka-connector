@@ -74,12 +74,6 @@
     <modules>
         <module>Kafka/KafkaJCAAPI</module>
         <module>Kafka/KafkaRAR</module>
-        <module>AmazonSQS/AmazonSQSJCAAPI</module>
-        <module>AmazonSQS/AmazonSQSRAR</module>
-        <module>MQTT/MQTTJCAAPI</module>
-        <module>MQTT/MQTTRAR</module>
-        <module>AzureServiceBus/AzureSBJCAAPI</module>
-        <module>AzureServiceBus/AzureSBRAR</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -225,12 +219,6 @@
             <modules>
                 <module>Kafka/KafkaExample</module>
                 <module>Kafka/kafka-rest-example</module>
-                <module>AmazonSQS/AmazonSQSExample</module>
-                <module>MQTT/MQTTExample</module>
-                <module>MQTT/MQTTSendExample</module>
-                <module>MQTT/MQTTReceiveExample</module>
-                <module>MQTT/MQTTSendJAXRSExample</module>
-                <module>AzureServiceBus/AzureSBExample</module>
             </modules>
         </profile>
     </profiles>
