@@ -130,6 +130,9 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     @ConfigProperty(type = Long.class, description = "The amount of time to wait before attempting a reconnection (ms)", defaultValue = "100")
     private Long reconnectBackoff;
 
+    @ConfigProperty(type = Boolean.class, description = "Indicates if the producer will ensure that exactly one copy of each message is written in the stream", defaultValue = "false")
+    private Boolean enableIdempotence;
+
     @ConfigProperty(type = String.class, description = "Additional properties to be passed to the KafkaConnection.")
     private String additionalProperties;
 
@@ -317,6 +320,15 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         producerProperties.setProperty(ProducerConfig.RECONNECT_BACKOFF_MS_CONFIG, Long.toString(reconnectBackoff));
     }
 
+    public Boolean getEnableIdempotence() {
+        return enableIdempotence;
+    }
+
+    public void setEnableIdempotence(Boolean enableIdempotence) {
+        this.enableIdempotence = enableIdempotence;
+        producerProperties.setProperty(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, Boolean.toString(enableIdempotence));
+    }
+
     public String getAdditionalProperties() {
         return additionalProperties;
     }
@@ -340,6 +352,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
                 additionalPropertiesParser == null
                         ? producerProperties
                         : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
+
         if (producer == null) {
             producer = new KafkaProducer(properties);
         }
@@ -352,6 +365,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
                 additionalPropertiesParser == null
                         ? producerProperties
                         : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
+
         if (producer == null) {
             producer = new KafkaProducer(properties);
         }
@@ -364,6 +378,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
                 additionalPropertiesParser == null
                         ? producerProperties
                         : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
+
         return new KafkaManagedConnection(producer);
     }
 
@@ -412,12 +427,15 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
                 Objects.equals(metadataMaxAge, that.metadataMaxAge) &&
                 Objects.equals(retryBackoff, that.retryBackoff) &&
                 Objects.equals(reconnectBackoff, that.reconnectBackoff) &&
+                Objects.equals(enableIdempotence, that.enableIdempotence) &&
                 Objects.equals(additionalProperties, that.additionalProperties);
     }
 
     @Override
     public int hashCode() {
-
-        return Objects.hash(producerProperties, bootstrapServersConfig, clientId, valueSerializer, keySerializer, bufferMemory, acks, retries, batchSize, lingerMS, maxBlockMS, maxRequestSize, receiveBufferBytes, requestTimeout, compression, connectionsMaxIdle, maxInflightConnections, metadataMaxAge, retryBackoff, reconnectBackoff, additionalProperties);
+        return Objects.hash(producerProperties, bootstrapServersConfig, clientId, valueSerializer, keySerializer, bufferMemory,
+        acks, retries, batchSize, lingerMS, maxBlockMS, maxRequestSize, receiveBufferBytes, requestTimeout, compression,
+        connectionsMaxIdle, maxInflightConnections, metadataMaxAge, retryBackoff, reconnectBackoff, enableIdempotence,
+        additionalProperties);
     }
 }
