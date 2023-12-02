@@ -85,7 +85,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     @ConfigProperty(defaultValue = "org.apache.kafka.common.serialization.StringSerializer", type = String.class, description = "Serializer class for value")
     private String keySerializer;
 
-    @ConfigProperty( type = Long.class, defaultValue = "33554432", description = "The total bytes the producer can use to buffer messages")
+    @ConfigProperty(type = Long.class, defaultValue = "33554432", description = "The total bytes the producer can use to buffer messages")
     private Long bufferMemory;
 
     @ConfigProperty(type = String.class, description = "The number of acks the producer requires", defaultValue = "1")
@@ -438,4 +438,5 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         connectionsMaxIdle, maxInflightConnections, metadataMaxAge, retryBackoff, reconnectBackoff, enableIdempotence,
         additionalProperties);
     }
+
 }
