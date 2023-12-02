@@ -374,11 +374,6 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     @Override
     public ManagedConnection createManagedConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
-        Properties properties =
-                additionalPropertiesParser == null
-                        ? producerProperties
-                        : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
-
         return new KafkaManagedConnection(producer);
     }
 
