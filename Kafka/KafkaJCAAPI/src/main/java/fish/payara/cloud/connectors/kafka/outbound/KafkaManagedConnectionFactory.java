@@ -91,7 +91,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     @ConfigProperty(type = String.class, description = "The number of acks the producer requires", defaultValue = "1")
     private String acks;
 
-    @ConfigProperty(type = Integer.class, description = "The number of retries if there is a transient error", defaultValue = "0")
+    @ConfigProperty(type = Integer.class, description = "The number of retries if there is a transient error", defaultValue = "2147483647")
     private Integer retries;
 
     @ConfigProperty(type = Long.class, description = "The producer will attempt to batch records together into fewer requests whenever multiple records are being sent to the same partition", defaultValue = "16384")
