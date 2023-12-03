@@ -44,6 +44,10 @@ import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
 import fish.payara.cloud.connectors.kafka.tools.AdditionalPropertiesParser;
 import java.io.PrintWriter;
 import java.io.Serializable;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
@@ -339,12 +343,56 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         return transactionIdPrefix;
     }
 
-    public void setTransactionIdPrefix(String transactionIdPrefix) {
+
+    // For getCandidateInetAddress() & getLocalHostInetAddress():
+    //     https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
+    //     License: https://creativecommons.org/licenses/by-sa/3.0/
+    private InetAddress getLocalHostInetAddress() throws UnknownHostException {
+        var jdkSuppliedAddress = InetAddress.getLocalHost();
+
+        if (jdkSuppliedAddress == null) {
+            throw new UnknownHostException("null InetAddress.getLocalHost()");
+        }
+        
+        return jdkSuppliedAddress;
+    }
+
+    private InetAddress getCandidateInetAddress() throws SocketException, UnknownHostException {
+        InetAddress candidateInetAddress = null;
+
+        for(var networkInterfaces = NetworkInterface.getNetworkInterfaces(); networkInterfaces.hasMoreElements();) {
+            var networkInterface = (NetworkInterface)networkInterfaces.nextElement();
+
+            for(var inetAddresses = networkInterface.getInetAddresses(); inetAddresses.hasMoreElements();) {
+                var inetAddress = (InetAddress)inetAddresses.nextElement();
+
+                if (!inetAddress.isLoopbackAddress()) {
+                    if (inetAddress.isSiteLocalAddress()) {
+                        return inetAddress;
+                    } else if (candidateInetAddress == null) {
+                        candidateInetAddress = inetAddress;
+                    }
+                }
+            }
+        }
+
+        return candidateInetAddress == null ? getLocalHostInetAddress() : candidateInetAddress;
+    }
+
+    private String getServerName() throws ResourceException  {
+        try {
+            return getCandidateInetAddress().getCanonicalHostName();
+        } catch (SocketException|UnknownHostException ex) {
+            throw new ResourceException(ex);
+        }
+    }
+
+    public void setTransactionIdPrefix(String transactionIdPrefix) throws ResourceException {
         this.transactionIdPrefix = transactionIdPrefix;
 
         if(transactionIdPrefix != null && !"".equals(transactionIdPrefix)) {
-            // TODO: Build transaction.id String here: prefix + host + sequence
-            String transactionId = transactionIdPrefix + "." + transactionIdSequence.incrementAndGet();
+            var transactionId = transactionIdPrefix + "-" + getServerName() + "-" + transactionIdSequence.incrementAndGet();
+
             producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
         }
     }
@@ -376,27 +424,6 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
                     additionalPropertiesParser == null
                             ? producerProperties
                             : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
-
-            // https://docs.confluent.io/platform/current/installation/configuration/producer-configs.html
-            // https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html
-            // https://www.confluent.io/blog/transactions-apache-kafka/
-            // https://stackoverflow.com/questions/50335227/how-to-pick-a-kafka-transaction-id
-            // https://cwiki.apache.org/confluence/display/KAFKA/KIP-939%3A+Support+Participation+in+2PC
-            // https://medium.com/@mkumar9009/how-apache-kafka-code-implements-2-phase-commit-24b19cce2022
-            // https://stackoverflow.com/questions/45047876/apache-kafka-exactly-once-implementation-not-sending-messages
-            // https://gist.github.com/jonathansantilli/3b69ebbcd24e7a30f66db790ef648f99
-            // https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html
-            // https://docs.spring.io/spring-kafka/reference/kafka/transactions.html
-            // https://stackoverflow.com/questions/52220225/spring-kafka-and-transactions
-            //     https://github.com/spring-projects/spring-kafka/issues/800#issuecomment-419501929
-            //         private final AtomicInteger transactionIdSuffix = new AtomicInteger();
-            //         return doCreateTxProducer(txIdPrefix, "" + this.transactionIdSuffix.getAndIncrement(), this::cacheReturner);
-            // Should also mix in host (see license code): LicenseCheckLogic
-            // Also algorithm here: https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
-            //
-            // Properties transactionProperties = new Properties();
-            // transactionProperties.put("transactional.id", "my-transactional-id");
-            // properties = AdditionalPropertiesParser.merge(properties, transactionProperties);
 
             producer = new KafkaProducer(properties);
 
