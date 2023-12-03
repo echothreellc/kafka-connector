@@ -344,7 +344,6 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         return transactionIdPrefix;
     }
 
-
     // For getCandidateInetAddress() & getLocalHostInetAddress():
     //     https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
     //     License: https://creativecommons.org/licenses/by-sa/3.0/

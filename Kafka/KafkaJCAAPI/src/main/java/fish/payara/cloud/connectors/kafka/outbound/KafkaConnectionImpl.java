@@ -104,8 +104,6 @@ class KafkaConnectionImpl implements KafkaConnection {
         return realConn.metrics();
     }
     
-    
-
     KafkaManagedConnection getRealConn() {
         return realConn;
     }
