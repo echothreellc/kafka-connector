@@ -51,7 +51,6 @@ import java.net.UnknownHostException;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.resource.ResourceException;
 import javax.resource.spi.ConfigProperty;
@@ -76,8 +75,6 @@ import org.apache.kafka.clients.producer.ProducerConfig;
         connectionImpl = KafkaConnectionImpl.class
 )
 public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, TransactionSupport {
-
-    private final AtomicInteger transactionIdSequence = new AtomicInteger();
 
     private final Properties producerProperties;
     private AdditionalPropertiesParser additionalPropertiesParser;
@@ -391,7 +388,9 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         this.transactionIdPrefix = transactionIdPrefix;
 
         if(transactionIdPrefix != null && !"".equals(transactionIdPrefix)) {
-            var transactionId = transactionIdPrefix + "-" + getServerName() + "-" + transactionIdSequence.incrementAndGet();
+            var transactionId = transactionIdPrefix
+                    + "-" + getServerName()
+                    + "-" + KafkaTransactionIdSequence.getInstance().getTransactionIdSequence().incrementAndGet();
 
             producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
         }

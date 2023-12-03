@@ -16,33 +16,25 @@
 
 package fish.payara.cloud.connectors.kafka.outbound;
 
-import javax.resource.ResourceException;
-import javax.resource.spi.LocalTransaction;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.kafka.clients.producer.KafkaProducer;
+public class KafkaTransactionIdSequence {
 
-public class KafkaLocalTransaction
-        implements LocalTransaction {
+    private final AtomicInteger transactionIdSequence = new AtomicInteger();
+
+    private KafkaTransactionIdSequence() {
+    }
+
+    private static class KafkaTransactionIdSequenceHolder {
+        static KafkaTransactionIdSequence instance = new KafkaTransactionIdSequence();
+    }
+
+    public static KafkaTransactionIdSequence getInstance() {
+        return KafkaTransactionIdSequenceHolder.instance;
+    }
+
+    public AtomicInteger getTransactionIdSequence() {
+        return transactionIdSequence;
+    }
     
-    private KafkaProducer producer;
-
-    public KafkaLocalTransaction(KafkaProducer producer) {
-        this.producer = producer;
-    }
-
-    @Override
-    public void begin() throws ResourceException {
-        producer.beginTransaction();
-    }
-
-    @Override
-    public void commit() throws ResourceException {
-        producer.commitTransaction();
-    }
-
-    @Override
-    public void rollback() throws ResourceException {
-        producer.abortTransaction();
-    }
-
 }
