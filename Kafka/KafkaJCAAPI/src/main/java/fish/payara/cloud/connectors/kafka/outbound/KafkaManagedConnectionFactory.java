@@ -42,8 +42,8 @@ package fish.payara.cloud.connectors.kafka.outbound;
 import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
 import fish.payara.cloud.connectors.kafka.tools.AdditionalPropertiesParser;
+
 import java.io.PrintWriter;
-import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
@@ -62,6 +62,7 @@ import javax.resource.spi.ManagedConnection;
 import javax.resource.spi.ManagedConnectionFactory;
 import javax.resource.spi.TransactionSupport;
 import javax.security.auth.Subject;
+
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 
@@ -74,7 +75,7 @@ import org.apache.kafka.clients.producer.ProducerConfig;
         connectionFactoryImpl = KafkaConnectionFactoryImpl.class,
         connectionImpl = KafkaConnectionImpl.class
 )
-public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, TransactionSupport, Serializable {
+public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, TransactionSupport {
 
     private final AtomicInteger transactionIdSequence = new AtomicInteger();
 
