@@ -47,6 +47,8 @@ import java.io.Serializable;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import javax.resource.ResourceException;
 import javax.resource.spi.ConfigProperty;
 import javax.resource.spi.ConnectionDefinition;
@@ -69,6 +71,8 @@ import org.apache.kafka.clients.producer.ProducerConfig;
         connectionImpl = KafkaConnectionImpl.class
 )
 public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, TransactionSupport, Serializable {
+
+    private final AtomicInteger transactionIdSequence = new AtomicInteger();
 
     private final Properties producerProperties;
     private AdditionalPropertiesParser additionalPropertiesParser;
@@ -133,13 +137,15 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     @ConfigProperty(type = Boolean.class, description = "Indicates if the producer will ensure that exactly one copy of each message is written in the stream", defaultValue = "false")
     private Boolean enableIdempotence;
 
+    @ConfigProperty(type = String.class, description = "Provides the prefix for the transaction ID if transactions are in use", defaultValue = "")
+    private String transactionIdPrefix;
+
     @ConfigProperty(type = String.class, description = "Additional properties to be passed to the KafkaConnection.")
     private String additionalProperties;
 
     transient private PrintWriter writer;
     
     transient private KafkaProducer producer;
-
 
     public KafkaManagedConnectionFactory() {
         producerProperties = new Properties();
@@ -329,6 +335,20 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         producerProperties.setProperty(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, Boolean.toString(enableIdempotence));
     }
 
+    public String getTransactionIdPrefix() {
+        return transactionIdPrefix;
+    }
+
+    public void setTransactionIdPrefix(String transactionIdPrefix) {
+        this.transactionIdPrefix = transactionIdPrefix;
+
+        if(transactionIdPrefix != null && !"".equals(transactionIdPrefix)) {
+            // TODO: Build transaction.id String here: prefix + host + sequence
+            String transactionId = transactionIdPrefix + "." + transactionIdSequence.incrementAndGet();
+            producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
+        }
+    }
+
     public String getAdditionalProperties() {
         return additionalProperties;
     }
@@ -346,29 +366,57 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         this.writer = writer;
     }
 
+    private boolean isUsingTransactions() {
+        return transactionIdPrefix != null && !"".equals(transactionIdPrefix);
+    }
+
+    private void ensureKafkaProducer() {
+        if (producer == null) {
+            Properties properties =
+                    additionalPropertiesParser == null
+                            ? producerProperties
+                            : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
+
+            // https://docs.confluent.io/platform/current/installation/configuration/producer-configs.html
+            // https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html
+            // https://www.confluent.io/blog/transactions-apache-kafka/
+            // https://stackoverflow.com/questions/50335227/how-to-pick-a-kafka-transaction-id
+            // https://cwiki.apache.org/confluence/display/KAFKA/KIP-939%3A+Support+Participation+in+2PC
+            // https://medium.com/@mkumar9009/how-apache-kafka-code-implements-2-phase-commit-24b19cce2022
+            // https://stackoverflow.com/questions/45047876/apache-kafka-exactly-once-implementation-not-sending-messages
+            // https://gist.github.com/jonathansantilli/3b69ebbcd24e7a30f66db790ef648f99
+            // https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html
+            // https://docs.spring.io/spring-kafka/reference/kafka/transactions.html
+            // https://stackoverflow.com/questions/52220225/spring-kafka-and-transactions
+            //     https://github.com/spring-projects/spring-kafka/issues/800#issuecomment-419501929
+            //         private final AtomicInteger transactionIdSuffix = new AtomicInteger();
+            //         return doCreateTxProducer(txIdPrefix, "" + this.transactionIdSuffix.getAndIncrement(), this::cacheReturner);
+            // Should also mix in host (see license code): LicenseCheckLogic
+            // Also algorithm here: https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
+            //
+            // Properties transactionProperties = new Properties();
+            // transactionProperties.put("transactional.id", "my-transactional-id");
+            // properties = AdditionalPropertiesParser.merge(properties, transactionProperties);
+
+            producer = new KafkaProducer(properties);
+
+            if(isUsingTransactions()) {
+                producer.initTransactions();
+            }
+        }
+    }
+
     @Override
     public Object createConnectionFactory(ConnectionManager cxManager) throws ResourceException {
-        Properties properties =
-                additionalPropertiesParser == null
-                        ? producerProperties
-                        : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
+        ensureKafkaProducer();
 
-        if (producer == null) {
-            producer = new KafkaProducer(properties);
-        }
         return new KafkaConnectionFactoryImpl(this,cxManager);
     }
 
     @Override
     public Object createConnectionFactory() throws ResourceException {
-        Properties properties =
-                additionalPropertiesParser == null
-                        ? producerProperties
-                        : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
+        ensureKafkaProducer();
 
-        if (producer == null) {
-            producer = new KafkaProducer(properties);
-        }
         return new KafkaConnectionFactoryImpl(this, null);
     }
 
@@ -394,7 +442,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     @Override
     public TransactionSupportLevel getTransactionSupport() {
-        return TransactionSupportLevel.NoTransaction;
+        return isUsingTransactions() ? TransactionSupportLevel.LocalTransaction : TransactionSupportLevel.NoTransaction;
     }
     
     @Override
@@ -423,6 +471,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
                 Objects.equals(retryBackoff, that.retryBackoff) &&
                 Objects.equals(reconnectBackoff, that.reconnectBackoff) &&
                 Objects.equals(enableIdempotence, that.enableIdempotence) &&
+                Objects.equals(transactionIdPrefix, that.transactionIdPrefix) &&
                 Objects.equals(additionalProperties, that.additionalProperties);
     }
 
@@ -431,7 +480,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         return Objects.hash(producerProperties, bootstrapServersConfig, clientId, valueSerializer, keySerializer, bufferMemory,
         acks, retries, batchSize, lingerMS, maxBlockMS, maxRequestSize, receiveBufferBytes, requestTimeout, compression,
         connectionsMaxIdle, maxInflightConnections, metadataMaxAge, retryBackoff, reconnectBackoff, enableIdempotence,
-        additionalProperties);
+        transactionIdPrefix, additionalProperties);
     }
 
 }

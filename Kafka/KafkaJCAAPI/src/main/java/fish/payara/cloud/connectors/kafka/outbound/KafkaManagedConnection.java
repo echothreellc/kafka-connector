@@ -122,7 +122,7 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public LocalTransaction getLocalTransaction() throws ResourceException {
-        throw new NotSupportedException("Local Transaction Not Supported");
+        return new KafkaLocalTransaction(producer);
     }
 
     @Override
