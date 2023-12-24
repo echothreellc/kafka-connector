@@ -1,5 +1,6 @@
 # Payara Cloud Connectors
-[![Java CI](https://github.com/payara/Cloud-Connectors/actions/workflows/maven.yml/badge.svg)](https://github.com/payara/Cloud-Connectors/actions/workflows/maven.yml)
+
+This is a forked copy of the Payara Cloud Connectors that focuses on just the Apache Kafka connector and adds transactional support to it. It is specifically designed to support the [Echo Three](https://gitlab.echothree.com/echothree/echothree/) project.
 
 Payara Cloud Connectors is a project to provide JavaEE standards based connectivity 
 to common Cloud infrastructure. Utilising JCA we provide connectivity to many different 
@@ -9,11 +10,6 @@ Payara Cloud Connectors are proven to work with Payara Server and Payara Micro 1
 
 Currently we have JCA adapters for;
 * Apache Kafka - sending messages using a Connection Factory and receiving messages via an MDB
-* Amazon SQS - sending messages using a Connection Factory and receiving messages via an MDB to Amazon Simple Queue Service queues.
-* MQTT - sending messages using a Connection Factory and receiving messages via an MDB to an MQTT broker or to IOT hubs that support MQTT.
-* Azure Service Bus - Sending and receiving messages to/from Azure Service Bus Queues using ConnectionFactory via MDB
-
-**ATTENTION**: Support for this repository is handled in the [Ecosystem Support repository](https://github.com/payara/ecosystem-support)
 
 ## Why Use JCA
 
