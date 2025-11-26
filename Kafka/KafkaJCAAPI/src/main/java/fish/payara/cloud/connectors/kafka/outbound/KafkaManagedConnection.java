@@ -39,32 +39,43 @@
  */
 package fish.payara.cloud.connectors.kafka.outbound;
 
-import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
-import org.apache.kafka.clients.producer.Callback;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
-import org.apache.kafka.common.PartitionInfo;
-
-import javax.resource.NotSupportedException;
-import javax.resource.ResourceException;
-import javax.resource.spi.*;
-import javax.security.auth.Subject;
-import javax.transaction.xa.XAResource;
 import java.io.PrintWriter;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+
+import javax.resource.NotSupportedException;
+import javax.resource.ResourceException;
+import javax.resource.spi.ConnectionEvent;
+import javax.resource.spi.ConnectionEventListener;
+import javax.resource.spi.ConnectionRequestInfo;
+import javax.resource.spi.LocalTransaction;
+import javax.resource.spi.ManagedConnection;
+import javax.resource.spi.ManagedConnectionMetaData;
+import javax.security.auth.Subject;
+import javax.transaction.xa.XAResource;
+
+import org.apache.kafka.clients.producer.Callback;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.PartitionInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 
 /**
  *
  * @author Steve Millidge (Payara Foundation)
  */
 public class KafkaManagedConnection implements ManagedConnection, KafkaConnection {
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
     private KafkaProducer producer;
     private final List<ConnectionEventListener> listeners;
@@ -72,6 +83,8 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     private PrintWriter writer;
 
     KafkaManagedConnection(KafkaProducer producer) {
+        log.info("new KafkaManagedConnection(...)");
+
         listeners = new LinkedList<>();
         connectionHandles = new HashSet<>();
         this.producer = producer;
@@ -79,6 +92,8 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public Object getConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
+        log.info("getConnection(...)");
+
         KafkaConnectionImpl conn = new KafkaConnectionImpl(this);
         connectionHandles.add(conn);
         return conn;
@@ -86,10 +101,13 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public void destroy() throws ResourceException {
+        log.info("destroy()");
     }
 
     @Override
     public void cleanup() throws ResourceException {
+        log.info("cleanup()");
+
         for (KafkaConnectionImpl conn : connectionHandles) {
             conn.setRealConn(null);
         }
@@ -98,6 +116,8 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public void associateConnection(Object connection) throws ResourceException {
+        log.info("associateConnection(...)");
+
         if (connection instanceof KafkaConnectionImpl) {
             KafkaConnectionImpl conn = (KafkaConnectionImpl) connection;
             conn.setRealConn(this);
@@ -107,11 +127,15 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public void addConnectionEventListener(ConnectionEventListener listener) {
+        log.info("addConnectionEventListener(...)");
+
         listeners.add(listener);
     }
 
     @Override
     public void removeConnectionEventListener(ConnectionEventListener listener) {
+        log.info("removeConnectionEventListener(...)");
+
         listeners.remove(listener);
     }
 
@@ -122,6 +146,8 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public LocalTransaction getLocalTransaction() throws ResourceException {
+        log.info("getLocalTransaction()");
+
         return new KafkaLocalTransaction(producer);
     }
 
@@ -142,26 +168,36 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord record) {
+        log.info("send(ProducerRecord record)");
+
         return producer.send(record);
     }
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord record, Callback callback) {
+        log.info("send(ProducerRecord record, Callback callback)");
+
         return producer.send(record,callback);
     }
 
     @Override
     public void flush() {
+        log.info("flush()");
+
         producer.flush();
     }
 
     @Override
     public List<PartitionInfo> partitionsFor(String topic) {
+        log.info("partitionsFor(...)");
+        
         return producer.partitionsFor(topic);
     }
 
     @Override
     public void close() throws Exception {
+        log.info("close()");
+
         producer.close();
         producer = null;
     }
@@ -172,6 +208,8 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     }
     
     void remove(KafkaConnectionImpl conn) {
+        log.info("remove(...)");
+        
         connectionHandles.remove(conn);
         ConnectionEvent event = new ConnectionEvent(this, ConnectionEvent.CONNECTION_CLOSED);
         event.setConnectionHandle(conn);

@@ -39,10 +39,6 @@
  */
 package fish.payara.cloud.connectors.kafka.outbound;
 
-import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
-import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
-import fish.payara.cloud.connectors.kafka.tools.AdditionalPropertiesParser;
-
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -64,6 +60,12 @@ import javax.security.auth.Subject;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
+import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
+import fish.payara.cloud.connectors.kafka.tools.AdditionalPropertiesParser;
 
 /**
  *
@@ -75,6 +77,8 @@ import org.apache.kafka.clients.producer.ProducerConfig;
         connectionImpl = KafkaConnectionImpl.class
 )
 public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, TransactionSupport {
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnectionFactory.class);
 
     private final Properties producerProperties;
     private AdditionalPropertiesParser additionalPropertiesParser;
@@ -150,6 +154,8 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     transient private KafkaProducer producer;
 
     public KafkaManagedConnectionFactory() {
+        log.info("new KafkaManagedConnectionFactory");
+
         producerProperties = new Properties();
     }
 
@@ -434,6 +440,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     @Override
     public Object createConnectionFactory(ConnectionManager cxManager) throws ResourceException {
+        log.info("createConnectionFactory(...)");
         ensureKafkaProducer();
 
         return new KafkaConnectionFactoryImpl(this,cxManager);
@@ -441,6 +448,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     @Override
     public Object createConnectionFactory() throws ResourceException {
+        log.info("createConnectionFactory()");
         ensureKafkaProducer();
 
         return new KafkaConnectionFactoryImpl(this, null);
@@ -448,6 +456,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     @Override
     public ManagedConnection createManagedConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
+        log.info("createManagedConnection(...)");
         return new KafkaManagedConnection(producer);
     }
 

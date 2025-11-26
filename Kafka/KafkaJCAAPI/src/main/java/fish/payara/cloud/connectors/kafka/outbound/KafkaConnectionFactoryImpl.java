@@ -39,9 +39,8 @@
  */
 package fish.payara.cloud.connectors.kafka.outbound;
 
-import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
-import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
 import java.io.Serializable;
+
 import javax.naming.NamingException;
 import javax.naming.Reference;
 import javax.resource.Referenceable;
@@ -51,12 +50,20 @@ import javax.resource.spi.ConnectionManager;
 import javax.resource.spi.ConnectionRequestInfo;
 import javax.resource.spi.ManagedConnectionFactory;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
+import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
+
 /**
  *
  * @author Steve Millidge (Payara Foundation)
  */
 class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable, Referenceable {
     
+    private static final Logger log = LoggerFactory.getLogger(KafkaConnectionFactoryImpl.class);
+
     private KafkaManagedConnectionFactory cf;
     private ConnectionManager cm;
     private Reference reference;
@@ -73,9 +80,12 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
     
     
     public KafkaConnectionFactoryImpl() {
+        log.info("new KafkaConnectionFactoryImpl()");
     }
     
     public KafkaConnectionFactoryImpl(KafkaManagedConnectionFactory cf, ConnectionManager cm) {
+        log.info("new KafkaConnectionFactoryImpl(...)");
+
         this.cf = cf;
         this.cm = cm;
         
@@ -86,11 +96,15 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
 
     @Override
     public KafkaConnection createConnection() throws ResourceException {
+        log.info("createConnection()");
+
         return (KafkaConnection) cm.allocateConnection(cf, null);
     }
 
     @Override
     public KafkaConnection createConnection(ConnectionSpec spec) throws ResourceException {
+        log.info("createConnection(...)");
+
         return (KafkaConnection) cm.allocateConnection(cf, (ConnectionRequestInfo) spec);
     }
 
@@ -106,8 +120,12 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
 
     private class DummyConnectionManager implements ConnectionManager {
 
+        private static final Logger log = LoggerFactory.getLogger(DummyConnectionManager.class);
+
         @Override
         public Object allocateConnection(ManagedConnectionFactory mcf, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
+            log.info("allocateConnection(...)");
+
             return mcf.createManagedConnection(null, cxRequestInfo);
         }
         

@@ -20,28 +20,40 @@ import javax.resource.ResourceException;
 import javax.resource.spi.LocalTransaction;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class KafkaLocalTransaction
         implements LocalTransaction {
     
+    private static final Logger log = LoggerFactory.getLogger(KafkaLocalTransaction.class);
+
     private KafkaProducer producer;
 
     public KafkaLocalTransaction(KafkaProducer producer) {
+        log.info("new KafkaLocalTransaction(...)");
+
         this.producer = producer;
     }
 
     @Override
     public void begin() throws ResourceException {
+        log.info("begin()");
+
         producer.beginTransaction();
     }
 
     @Override
     public void commit() throws ResourceException {
+        log.info("commit()");
+
         producer.commitTransaction();
     }
 
     @Override
     public void rollback() throws ResourceException {
+        log.info("rollback()");
+
         producer.abortTransaction();
     }
 
