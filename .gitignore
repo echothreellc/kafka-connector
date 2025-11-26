@@ -17,3 +17,6 @@ target/
 # IntelliJ
 .idea/
 *.iml
+
+# VS Code
+.vscode/
