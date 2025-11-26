@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import javax.resource.ResourceException;
 import javax.resource.spi.ActivationSpec;
 import javax.resource.spi.BootstrapContext;
@@ -80,7 +81,7 @@ public class KafkaResourceAdapter implements ResourceAdapter, Serializable, Work
 
     @Override
     public void start(BootstrapContext ctx) throws ResourceAdapterInternalException {
-        LOGGER.info("Kafka Resource Adapter Started..");
+        LOGGER.info("Kafka Resource Adapter Started");
         context = ctx;
         workManager = context.getWorkManager();
         running = true;
