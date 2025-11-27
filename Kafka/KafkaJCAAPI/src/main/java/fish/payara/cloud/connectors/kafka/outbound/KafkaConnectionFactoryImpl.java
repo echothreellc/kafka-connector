@@ -88,7 +88,10 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
         this.cm = cm;
         
         if (this.cm == null) {
+            log.info("using DummyConnectionManager");
             this.cm = new DummyConnectionManager();
+        } else {
+            log.info("using provided ConnectionManager");
         }
     }
 
