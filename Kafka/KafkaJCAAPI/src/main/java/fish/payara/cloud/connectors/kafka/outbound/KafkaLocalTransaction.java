@@ -28,31 +28,34 @@ public class KafkaLocalTransaction
     
     private static final Logger log = LoggerFactory.getLogger(KafkaLocalTransaction.class);
 
-    private KafkaProducer producer;
+    private final KafkaProducer<?,?> producer;
 
-    public KafkaLocalTransaction(KafkaProducer producer) {
-        log.info("new KafkaLocalTransaction(...)");
+    KafkaLocalTransaction(KafkaProducer<?,?> producer) {
+        log.debug("new KafkaLocalTransaction(...)");
 
         this.producer = producer;
     }
 
     @Override
-    public void begin() throws ResourceException {
-        log.info("begin()");
+    public void begin()
+            throws ResourceException {
+        log.debug("begin()");
 
         producer.beginTransaction();
     }
 
     @Override
-    public void commit() throws ResourceException {
-        log.info("commit()");
+    public void commit()
+            throws ResourceException {
+        log.debug("commit()");
 
         producer.commitTransaction();
     }
 
     @Override
-    public void rollback() throws ResourceException {
-        log.info("rollback()");
+    public void rollback()
+            throws ResourceException {
+        log.debug("rollback()");
 
         producer.abortTransaction();
     }

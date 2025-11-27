@@ -85,6 +85,7 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
     private KafkaProducer<?,?> producer;
+    private LocalTransaction localTransaction;
     
     private final List<ConnectionEventListener> listeners;
     private final HashSet<KafkaConnectionImpl> connectionHandles;
@@ -155,6 +156,7 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
         producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
         
         producer = new KafkaProducer(producerProperties);
+        localTransaction = new KafkaLocalTransaction(producer);
 
         if(usingTransactions) {
             producer.initTransactions();
@@ -223,8 +225,7 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     @Override
     public LocalTransaction getLocalTransaction() throws ResourceException {
         log.info("getLocalTransaction()");
-
-        return new KafkaLocalTransaction(producer);
+        return localTransaction;
     }
 
     @Override
@@ -275,7 +276,9 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
         log.info("close()");
 
         producer.close();
+        
         producer = null;
+        localTransaction = null;
     }
 
     @Override
