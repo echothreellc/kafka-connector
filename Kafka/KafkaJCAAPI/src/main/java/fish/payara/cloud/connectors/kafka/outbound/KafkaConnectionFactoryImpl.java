@@ -77,8 +77,6 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
         this.name = name;
     }
     
-    
-    
     public KafkaConnectionFactoryImpl() {
         log.info("new KafkaConnectionFactoryImpl()");
     }
@@ -97,14 +95,12 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
     @Override
     public KafkaConnection createConnection() throws ResourceException {
         log.info("createConnection()");
-
         return (KafkaConnection) cm.allocateConnection(cf, null);
     }
 
     @Override
     public KafkaConnection createConnection(ConnectionSpec spec) throws ResourceException {
         log.info("createConnection(...)");
-
         return (KafkaConnection) cm.allocateConnection(cf, (ConnectionRequestInfo) spec);
     }
 
@@ -125,7 +121,6 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
         @Override
         public Object allocateConnection(ManagedConnectionFactory mcf, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
             log.info("allocateConnection(...)");
-
             return mcf.createManagedConnection(null, cxRequestInfo);
         }
         

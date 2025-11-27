@@ -39,17 +39,20 @@
  */
 package fish.payara.cloud.connectors.kafka.outbound;
 
-import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+
 import javax.resource.ResourceException;
+
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
+
+import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 
 /**
  *

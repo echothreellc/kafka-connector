@@ -40,10 +40,16 @@
 package fish.payara.cloud.connectors.kafka.outbound;
 
 import java.io.PrintWriter;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.Future;
 
 import javax.resource.NotSupportedException;
@@ -59,6 +65,7 @@ import javax.transaction.xa.XAResource;
 
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.Metric;
@@ -77,17 +84,84 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
 
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
-    private KafkaProducer producer;
+    private KafkaProducer<?,?> producer;
+    
     private final List<ConnectionEventListener> listeners;
     private final HashSet<KafkaConnectionImpl> connectionHandles;
     private PrintWriter writer;
 
-    KafkaManagedConnection(KafkaProducer producer) {
+    // For getCandidateInetAddress() & getLocalHostInetAddress():
+    //     https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
+    //     License: https://creativecommons.org/licenses/by-sa/3.0/
+    private InetAddress getLocalHostInetAddress() throws UnknownHostException {
+        var jdkSuppliedAddress = InetAddress.getLocalHost();
+
+        if (jdkSuppliedAddress == null) {
+            throw new UnknownHostException("null InetAddress.getLocalHost()");
+        }
+        
+        return jdkSuppliedAddress;
+    }
+
+    private InetAddress getCandidateInetAddress() throws SocketException, UnknownHostException {
+        InetAddress candidateInetAddress = null;
+
+        for(var networkInterfaces = NetworkInterface.getNetworkInterfaces(); networkInterfaces.hasMoreElements();) {
+            var networkInterface = (NetworkInterface)networkInterfaces.nextElement();
+
+            for(var inetAddresses = networkInterface.getInetAddresses(); inetAddresses.hasMoreElements();) {
+                var inetAddress = (InetAddress)inetAddresses.nextElement();
+
+                if (!inetAddress.isLoopbackAddress()) {
+                    if (inetAddress.isSiteLocalAddress()) {
+                        return inetAddress;
+                    } else if (candidateInetAddress == null) {
+                        candidateInetAddress = inetAddress;
+                    }
+                }
+            }
+        }
+
+        return candidateInetAddress == null ? getLocalHostInetAddress() : candidateInetAddress;
+    }
+
+    private String getServerName()
+        throws ResourceException  {
+        try {
+            return getCandidateInetAddress().getCanonicalHostName();
+        } catch (SocketException|UnknownHostException ex) {
+            throw new ResourceException(ex);
+        }
+    }
+
+    KafkaManagedConnection(Properties producerProperties, String clientId, boolean usingTransactions, String transactionIdPrefix)
+            throws ResourceException {
         log.info("new KafkaManagedConnection(...)");
+
+        producerProperties = (Properties) producerProperties.clone();
+        if(transactionIdPrefix != null && !"".equals(transactionIdPrefix)) {
+            var transactionId = transactionIdPrefix
+                    + "-" + getServerName()
+                    + "-" + KafkaTransactionIdSequence.getInstance().getTransactionIdSequence().incrementAndGet();
+
+            log.info("ProducerConfig.TRANSACTIONAL_ID_CONFIG = " + transactionId);
+            producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
+        }
+
+        // To compensate for InstanceAlreadyExistsException in KafkaProducer MBean registration:
+        //      https://www.baeldung.com/kafka-instancealreadyexistsexception
+        var clientIdConfig = clientId + "-" + UUID.randomUUID();
+        log.info("ProducerConfig.CLIENT_ID_CONFIG = " + clientIdConfig);
+        producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
+        
+        producer = new KafkaProducer(producerProperties);
+
+        if(usingTransactions) {
+            producer.initTransactions();
+        }
 
         listeners = new LinkedList<>();
         connectionHandles = new HashSet<>();
-        this.producer = producer;
     }
 
     @Override
@@ -102,6 +176,9 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     @Override
     public void destroy() throws ResourceException {
         log.info("destroy()");
+
+        producer.close();
+        producer = null;
     }
 
     @Override
@@ -118,8 +195,7 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     public void associateConnection(Object connection) throws ResourceException {
         log.info("associateConnection(...)");
 
-        if (connection instanceof KafkaConnectionImpl) {
-            KafkaConnectionImpl conn = (KafkaConnectionImpl) connection;
+        if(connection instanceof KafkaConnectionImpl conn) {
             conn.setRealConn(this);
             connectionHandles.add(conn);
         }

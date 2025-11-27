@@ -40,10 +40,6 @@
 package fish.payara.cloud.connectors.kafka.outbound;
 
 import java.io.PrintWriter;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
@@ -58,7 +54,6 @@ import javax.resource.spi.ManagedConnectionFactory;
 import javax.resource.spi.TransactionSupport;
 import javax.security.auth.Subject;
 
-import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -151,7 +146,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     transient private PrintWriter writer;
     
-    transient private KafkaProducer producer;
+    transient private Properties mergedProducerProperties;
 
     public KafkaManagedConnectionFactory() {
         log.info("new KafkaManagedConnectionFactory");
@@ -174,7 +169,6 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     public void setClientId(String clientId) {
         this.clientId = clientId;
-        producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientId);
     }
 
     public String getValueSerializer() {
@@ -347,59 +341,8 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         return transactionIdPrefix;
     }
 
-    // For getCandidateInetAddress() & getLocalHostInetAddress():
-    //     https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
-    //     License: https://creativecommons.org/licenses/by-sa/3.0/
-    private InetAddress getLocalHostInetAddress() throws UnknownHostException {
-        var jdkSuppliedAddress = InetAddress.getLocalHost();
-
-        if (jdkSuppliedAddress == null) {
-            throw new UnknownHostException("null InetAddress.getLocalHost()");
-        }
-        
-        return jdkSuppliedAddress;
-    }
-
-    private InetAddress getCandidateInetAddress() throws SocketException, UnknownHostException {
-        InetAddress candidateInetAddress = null;
-
-        for(var networkInterfaces = NetworkInterface.getNetworkInterfaces(); networkInterfaces.hasMoreElements();) {
-            var networkInterface = (NetworkInterface)networkInterfaces.nextElement();
-
-            for(var inetAddresses = networkInterface.getInetAddresses(); inetAddresses.hasMoreElements();) {
-                var inetAddress = (InetAddress)inetAddresses.nextElement();
-
-                if (!inetAddress.isLoopbackAddress()) {
-                    if (inetAddress.isSiteLocalAddress()) {
-                        return inetAddress;
-                    } else if (candidateInetAddress == null) {
-                        candidateInetAddress = inetAddress;
-                    }
-                }
-            }
-        }
-
-        return candidateInetAddress == null ? getLocalHostInetAddress() : candidateInetAddress;
-    }
-
-    private String getServerName() throws ResourceException  {
-        try {
-            return getCandidateInetAddress().getCanonicalHostName();
-        } catch (SocketException|UnknownHostException ex) {
-            throw new ResourceException(ex);
-        }
-    }
-
     public void setTransactionIdPrefix(String transactionIdPrefix) throws ResourceException {
         this.transactionIdPrefix = transactionIdPrefix;
-
-        if(transactionIdPrefix != null && !"".equals(transactionIdPrefix)) {
-            var transactionId = transactionIdPrefix
-                    + "-" + getServerName()
-                    + "-" + KafkaTransactionIdSequence.getInstance().getTransactionIdSequence().incrementAndGet();
-
-            producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
-        }
     }
 
     public String getAdditionalProperties() {
@@ -419,45 +362,32 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
         this.writer = writer;
     }
 
-    private boolean isUsingTransactions() {
-        return transactionIdPrefix != null && !"".equals(transactionIdPrefix);
-    }
-
-    private void ensureKafkaProducer() {
-        if (producer == null) {
-            Properties properties =
+    private void ensureMergedProducerProperties() {
+        if(mergedProducerProperties == null) {
+            mergedProducerProperties =
                     additionalPropertiesParser == null
                             ? producerProperties
                             : AdditionalPropertiesParser.merge(producerProperties,  additionalPropertiesParser.parse());
-
-            producer = new KafkaProducer(properties);
-
-            if(isUsingTransactions()) {
-                producer.initTransactions();
-            }
         }
     }
 
     @Override
     public Object createConnectionFactory(ConnectionManager cxManager) throws ResourceException {
         log.info("createConnectionFactory(...)");
-        ensureKafkaProducer();
-
         return new KafkaConnectionFactoryImpl(this,cxManager);
     }
 
     @Override
     public Object createConnectionFactory() throws ResourceException {
         log.info("createConnectionFactory()");
-        ensureKafkaProducer();
-
         return new KafkaConnectionFactoryImpl(this, null);
     }
 
     @Override
     public ManagedConnection createManagedConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
         log.info("createManagedConnection(...)");
-        return new KafkaManagedConnection(producer);
+        ensureMergedProducerProperties();
+        return new KafkaManagedConnection(mergedProducerProperties, clientId, isUsingTransactions(), transactionIdPrefix);
     }
 
     @Override
@@ -473,6 +403,10 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     @Override
     public PrintWriter getLogWriter() throws ResourceException {
         return writer;
+    }
+
+    private boolean isUsingTransactions() {
+        return transactionIdPrefix != null && !"".equals(transactionIdPrefix);
     }
 
     @Override
