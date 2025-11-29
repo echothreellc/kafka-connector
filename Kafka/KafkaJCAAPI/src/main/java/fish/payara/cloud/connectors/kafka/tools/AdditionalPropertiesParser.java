@@ -51,17 +51,16 @@ public class AdditionalPropertiesParser {
     private static final String KEY_VALUE_SEPARATOR = "=";
     private static final char ESCAPE_CHARACTER = '\'';
 
-    private String propertiesString;
+    private final String propertiesString;
 
     public AdditionalPropertiesParser(String propertiesString) {
         this.propertiesString = propertiesString;
     }
 
-
     private static String[] split(String propertiesString, String separator) {
-        ArrayList<String> properties = new ArrayList<>();
-        boolean insideComplexValue = false;
-        StringBuilder part = new StringBuilder();
+        var properties = new ArrayList<String>();
+        var insideComplexValue = false;
+        var part = new StringBuilder();
 
         for (int i = 0; i < propertiesString.length(); i++) {
             part.append(propertiesString.charAt(i));
@@ -77,7 +76,7 @@ public class AdditionalPropertiesParser {
             }
         }
 
-        if (part.length() > 0) {
+        if (!part.isEmpty()) {
             properties.add(part.toString());
         }
 
@@ -85,11 +84,12 @@ public class AdditionalPropertiesParser {
     }
 
     private static String correctSingleQuotes(String val) {
-        String cleaned = val.replace("" + ESCAPE_CHARACTER + ESCAPE_CHARACTER, "" + ESCAPE_CHARACTER);
+        var cleaned = val.replace("" + ESCAPE_CHARACTER + ESCAPE_CHARACTER, "" + ESCAPE_CHARACTER);
 
         if (cleaned.charAt(0) == ESCAPE_CHARACTER) {
             cleaned = cleaned.substring(1);
         }
+
         if (cleaned.charAt(cleaned.length() - 1) == ESCAPE_CHARACTER) {
             cleaned = cleaned.substring(0, cleaned.length() - 1);
         }
@@ -97,57 +97,60 @@ public class AdditionalPropertiesParser {
         return cleaned;
     }
 
+    public static Properties merge(Properties base, Properties additional){
+        var properties = new Properties();
 
-    public static Properties merge(Properties base, Properties addtional){
-        Properties properties = new Properties();
         properties.putAll(base);
-        if(addtional != null){
-            for(String key : addtional.stringPropertyNames()){
-                properties.putIfAbsent(key, addtional.getProperty(key));
+        if(additional != null){
+            for(String key : additional.stringPropertyNames()){
+                properties.putIfAbsent(key, additional.getProperty(key));
             }
         }
+
         return properties;
     }
 
     public Properties parse() {
-        Properties properties = new Properties();
+        var properties = new Properties();
+
         if (propertiesString != null) {
             String lastKey = null;
             final String[] splittedProperties = split(propertiesString, LIST_SEPARATOR);
+
             for (String singleKeyValue : splittedProperties) {
-                final String[] splittedKeyValue = split(singleKeyValue, KEY_VALUE_SEPARATOR);
-                switch (splittedKeyValue.length) {
-                    case 2: {
-                        final String key = correctSingleQuotes(splittedKeyValue[0].trim());
+                final var splitKeyValue = split(singleKeyValue, KEY_VALUE_SEPARATOR);
+
+                switch(splitKeyValue.length) {
+                    case 2 -> {
+                        final var key = correctSingleQuotes(splitKeyValue[0].trim());
                         lastKey = key;
-                        final String value = correctSingleQuotes(splittedKeyValue[1].trim());
-                        final String existingValue = properties.getProperty(key);
-                        if (existingValue != null) {
+                        final var value = correctSingleQuotes(splitKeyValue[1].trim());
+                        final var existingValue = properties.getProperty(key);
+
+                        if(existingValue != null) {
                             properties.setProperty(key, existingValue + LIST_SEPARATOR + value);
                         } else {
                             properties.setProperty(key, value);
                         }
-                        break;
                     }
-                    case 1: {
-                        if (lastKey != null) {
-                            final String value = correctSingleQuotes(splittedKeyValue[0].trim());
+                    case 1 -> {
+                        if(lastKey != null) {
+                            final var value = correctSingleQuotes(splitKeyValue[0].trim());
                             // assume property to be list and use the last key to add to
-                            final String existingValue = properties.getProperty(lastKey);
-                            if (existingValue != null) {
+                            final var existingValue = properties.getProperty(lastKey);
+
+                            if(existingValue != null) {
                                 properties.setProperty(lastKey, existingValue + LIST_SEPARATOR + value);
                             } else {
                                 properties.setProperty(lastKey, value);
                             }
                         }
-                        break;
                     }
-                    default:
-                        LOG.warning("Found illegal properties " + Arrays.toString(splittedKeyValue));
-
+                    default -> LOG.warning("Found illegal properties " + Arrays.toString(splitKeyValue));
                 }
             }
         }
+
         return properties;
     }
 
