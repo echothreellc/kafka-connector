@@ -60,7 +60,8 @@ import fish.payara.cloud.connectors.kafka.api.KafkaConnectionFactory;
  *
  * @author Steve Millidge (Payara Foundation)
  */
-class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable, Referenceable {
+class KafkaConnectionFactoryImpl<K, V>
+        implements KafkaConnectionFactory<K, V>, Serializable, Referenceable {
     
     private static final Logger log = LoggerFactory.getLogger(KafkaConnectionFactoryImpl.class);
 
@@ -96,15 +97,15 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
     }
 
     @Override
-    public KafkaConnection createConnection() throws ResourceException {
+    public KafkaConnection<K, V> createConnection() throws ResourceException {
         log.info("createConnection()");
-        return (KafkaConnection) cm.allocateConnection(cf, null);
+        return (KafkaConnection<K, V>) cm.allocateConnection(cf, null);
     }
 
     @Override
-    public KafkaConnection createConnection(ConnectionSpec spec) throws ResourceException {
+    public KafkaConnection<K, V> createConnection(ConnectionSpec spec) throws ResourceException {
         log.info("createConnection(...)");
-        return (KafkaConnection) cm.allocateConnection(cf, (ConnectionRequestInfo) spec);
+        return (KafkaConnection<K, V>) cm.allocateConnection(cf, (ConnectionRequestInfo) spec);
     }
 
     @Override
@@ -117,7 +118,7 @@ class KafkaConnectionFactoryImpl implements KafkaConnectionFactory, Serializable
         return reference;
     }
 
-    private class DummyConnectionManager implements ConnectionManager {
+    private static class DummyConnectionManager implements ConnectionManager {
 
         private static final Logger log = LoggerFactory.getLogger(DummyConnectionManager.class);
 

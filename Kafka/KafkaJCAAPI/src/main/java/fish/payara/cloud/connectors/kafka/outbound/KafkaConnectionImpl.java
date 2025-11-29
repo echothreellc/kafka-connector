@@ -58,11 +58,12 @@ import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
  *
  * @author Steve Millidge (Payara Foundation)
  */
-class KafkaConnectionImpl implements KafkaConnection {
+class KafkaConnectionImpl<K, V>
+        implements KafkaConnection<K, V> {
 
-    private KafkaManagedConnection realConn;
+    private KafkaManagedConnection<K, V> realConn;
 
-    public KafkaConnectionImpl(KafkaManagedConnection realConn) {
+    public KafkaConnectionImpl(KafkaManagedConnection<K, V> realConn) {
         this.realConn = realConn;
     }
 
@@ -78,13 +79,13 @@ class KafkaConnectionImpl implements KafkaConnection {
     }
 
     @Override
-    public Future<RecordMetadata> send(ProducerRecord record) throws ResourceException {
+    public Future<RecordMetadata> send(ProducerRecord<K, V> record) throws ResourceException {
         checkValidity();
         return realConn.send(record);
     }
 
     @Override
-    public Future<RecordMetadata> send(ProducerRecord record, Callback callback) throws ResourceException {
+    public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) throws ResourceException {
         checkValidity();
         return realConn.send(record, callback);
     }
@@ -107,11 +108,11 @@ class KafkaConnectionImpl implements KafkaConnection {
         return realConn.metrics();
     }
     
-    KafkaManagedConnection getRealConn() {
+    KafkaManagedConnection<K, V> getRealConn() {
         return realConn;
     }
 
-    void setRealConn(KafkaManagedConnection realConn) {
+    void setRealConn(KafkaManagedConnection<K, V> realConn) {
         this.realConn = realConn;
     }
 

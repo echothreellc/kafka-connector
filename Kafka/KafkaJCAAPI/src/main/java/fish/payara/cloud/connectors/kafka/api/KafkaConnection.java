@@ -53,16 +53,17 @@ import org.apache.kafka.common.PartitionInfo;
  *
  * @author Steve Millidge (Payara Foundation)
  */
-public interface KafkaConnection extends AutoCloseable {
+public interface KafkaConnection<K, V>
+        extends AutoCloseable {
     
-    public Future<RecordMetadata> send(ProducerRecord record) throws ResourceException;
+    Future<RecordMetadata> send(ProducerRecord<K, V> record) throws ResourceException;
+
+    Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) throws ResourceException;
     
-    public Future<RecordMetadata> send(ProducerRecord record, Callback callback) throws ResourceException;
-    
-    public void flush() throws ResourceException;
+    void flush() throws ResourceException;
     
     List<PartitionInfo> partitionsFor(String topic) throws ResourceException;
     
-    public java.util.Map<MetricName,? extends Metric> metrics​() throws ResourceException;
+    java.util.Map<MetricName,? extends Metric> metrics() throws ResourceException;
     
 }

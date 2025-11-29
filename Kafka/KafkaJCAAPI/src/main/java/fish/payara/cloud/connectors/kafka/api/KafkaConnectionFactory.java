@@ -46,11 +46,11 @@ import javax.resource.cci.ConnectionSpec;
  *
  * @author Steve Millidge (Payara Foundation)
  */
-public interface KafkaConnectionFactory {
+public interface KafkaConnectionFactory<K, V> {
     
-    KafkaConnection createConnection() throws ResourceException;
+    KafkaConnection<K, V> createConnection() throws ResourceException;
 
-    KafkaConnection createConnection(ConnectionSpec spec) throws ResourceException;
+    KafkaConnection<K, V> createConnection(ConnectionSpec spec) throws ResourceException;
 
     
 }

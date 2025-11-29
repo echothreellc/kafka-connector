@@ -39,6 +39,7 @@
  */
 package fish.payara.cloud.connectors.kafka.outbound;
 
+import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -51,7 +52,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.Future;
-
 import javax.resource.NotSupportedException;
 import javax.resource.ResourceException;
 import javax.resource.spi.ConnectionEvent;
@@ -62,7 +62,6 @@ import javax.resource.spi.ManagedConnection;
 import javax.resource.spi.ManagedConnectionMetaData;
 import javax.security.auth.Subject;
 import javax.transaction.xa.XAResource;
-
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -74,13 +73,12 @@ import org.apache.kafka.common.PartitionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
-
 /**
  *
  * @author Steve Millidge (Payara Foundation)
  */
-public class KafkaManagedConnection implements ManagedConnection, KafkaConnection {
+public class KafkaManagedConnection<K, V>
+        implements ManagedConnection, KafkaConnection<K, V> {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
@@ -88,7 +86,7 @@ public class KafkaManagedConnection implements ManagedConnection, KafkaConnectio
     private LocalTransaction localTransaction;
     
     private final List<ConnectionEventListener> listeners;
-    private final HashSet<KafkaConnectionImpl> connectionHandles;
+    private final HashSet<KafkaConnectionImpl<K, V>> connectionHandles;
     private PrintWriter writer;
 
     // For getCandidateInetAddress() & getLocalHostInetAddress():
