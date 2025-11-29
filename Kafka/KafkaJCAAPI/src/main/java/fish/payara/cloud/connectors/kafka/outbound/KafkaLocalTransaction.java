@@ -23,14 +23,14 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KafkaLocalTransaction
+public class KafkaLocalTransaction<K, V>
         implements LocalTransaction {
     
     private static final Logger log = LoggerFactory.getLogger(KafkaLocalTransaction.class);
 
-    private final KafkaProducer<?,?> producer;
+    private final KafkaProducer<K, V> producer;
 
-    KafkaLocalTransaction(KafkaProducer<?,?> producer) {
+    KafkaLocalTransaction(KafkaProducer<K, V> producer) {
         log.debug("new KafkaLocalTransaction(...)");
 
         this.producer = producer;

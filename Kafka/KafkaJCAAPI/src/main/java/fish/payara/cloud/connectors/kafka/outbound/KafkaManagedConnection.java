@@ -82,7 +82,7 @@ public class KafkaManagedConnection<K, V>
 
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
-    private KafkaProducer<?,?> producer;
+    private KafkaProducer<K, V> producer;
     private LocalTransaction localTransaction;
     
     private final List<ConnectionEventListener> listeners;
@@ -138,7 +138,7 @@ public class KafkaManagedConnection<K, V>
         log.info("new KafkaManagedConnection(...)");
 
         producerProperties = (Properties) producerProperties.clone();
-        if(transactionIdPrefix != null && !"".equals(transactionIdPrefix)) {
+        if(transactionIdPrefix != null && !transactionIdPrefix.isEmpty()) {
             var transactionId = transactionIdPrefix
                     + "-" + getServerName()
                     + "-" + KafkaTransactionIdSequence.getInstance().getTransactionIdSequence().incrementAndGet();
@@ -153,8 +153,8 @@ public class KafkaManagedConnection<K, V>
         log.info("ProducerConfig.CLIENT_ID_CONFIG = " + clientIdConfig);
         producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
         
-        producer = new KafkaProducer(producerProperties);
-        localTransaction = new KafkaLocalTransaction(producer);
+        producer = new KafkaProducer<>(producerProperties);
+        localTransaction = new KafkaLocalTransaction<>(producer);
 
         if(usingTransactions) {
             producer.initTransactions();
@@ -168,7 +168,7 @@ public class KafkaManagedConnection<K, V>
     public Object getConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
         log.info("getConnection(...)");
 
-        KafkaConnectionImpl conn = new KafkaConnectionImpl(this);
+        var conn = new KafkaConnectionImpl<>(this);
         connectionHandles.add(conn);
         return conn;
     }
@@ -185,7 +185,7 @@ public class KafkaManagedConnection<K, V>
     public void cleanup() throws ResourceException {
         log.info("cleanup()");
 
-        for (KafkaConnectionImpl conn : connectionHandles) {
+        for (KafkaConnectionImpl<K, V> conn : connectionHandles) {
             conn.setRealConn(null);
         }
         connectionHandles.clear();
@@ -242,14 +242,14 @@ public class KafkaManagedConnection<K, V>
     }
 
     @Override
-    public Future<RecordMetadata> send(ProducerRecord record) {
+    public Future<RecordMetadata> send(ProducerRecord<K, V> record) {
         log.info("send(ProducerRecord record)");
 
         return producer.send(record);
     }
 
     @Override
-    public Future<RecordMetadata> send(ProducerRecord record, Callback callback) {
+    public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
         log.info("send(ProducerRecord record, Callback callback)");
 
         return producer.send(record,callback);
@@ -284,7 +284,7 @@ public class KafkaManagedConnection<K, V>
         return producer.metrics();
     }
     
-    void remove(KafkaConnectionImpl conn) {
+    void remove(KafkaConnectionImpl<K, V> conn) {
         log.info("remove(...)");
         
         connectionHandles.remove(conn);
