@@ -79,32 +79,32 @@ class KafkaConnectionFactoryImpl<K, V>
     }
     
     public KafkaConnectionFactoryImpl() {
-        log.info("new KafkaConnectionFactoryImpl()");
+        log.debug("new KafkaConnectionFactoryImpl()");
     }
     
     public KafkaConnectionFactoryImpl(KafkaManagedConnectionFactory cf, ConnectionManager cm) {
-        log.info("new KafkaConnectionFactoryImpl(...)");
+        log.debug("new KafkaConnectionFactoryImpl(...)");
 
         this.cf = cf;
         this.cm = cm;
         
         if (this.cm == null) {
-            log.info("using DummyConnectionManager");
+            log.debug("using DummyConnectionManager");
             this.cm = new DummyConnectionManager();
         } else {
-            log.info("using provided ConnectionManager");
+            log.debug("using provided ConnectionManager");
         }
     }
 
     @Override
     public KafkaConnection<K, V> createConnection() throws ResourceException {
-        log.info("createConnection()");
+        log.debug("createConnection()");
         return (KafkaConnection<K, V>) cm.allocateConnection(cf, null);
     }
 
     @Override
     public KafkaConnection<K, V> createConnection(ConnectionSpec spec) throws ResourceException {
-        log.info("createConnection(...)");
+        log.debug("createConnection(...)");
         return (KafkaConnection<K, V>) cm.allocateConnection(cf, (ConnectionRequestInfo) spec);
     }
 
@@ -124,7 +124,7 @@ class KafkaConnectionFactoryImpl<K, V>
 
         @Override
         public Object allocateConnection(ManagedConnectionFactory mcf, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
-            log.info("allocateConnection(...)");
+            log.debug("allocateConnection(...)");
             return mcf.createManagedConnection(null, cxRequestInfo);
         }
         

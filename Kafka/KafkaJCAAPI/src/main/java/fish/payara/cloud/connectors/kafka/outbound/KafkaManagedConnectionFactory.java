@@ -149,7 +149,7 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     transient private Properties mergedProducerProperties;
 
     public KafkaManagedConnectionFactory() {
-        log.info("new KafkaManagedConnectionFactory");
+        log.debug("new KafkaManagedConnectionFactory");
 
         producerProperties = new Properties();
     }
@@ -373,19 +373,19 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
 
     @Override
     public Object createConnectionFactory(ConnectionManager cxManager) throws ResourceException {
-        log.info("createConnectionFactory(...)");
+        log.debug("createConnectionFactory(...)");
         return new KafkaConnectionFactoryImpl(this,cxManager);
     }
 
     @Override
     public Object createConnectionFactory() throws ResourceException {
-        log.info("createConnectionFactory()");
+        log.debug("createConnectionFactory()");
         return new KafkaConnectionFactoryImpl(this, null);
     }
 
     @Override
     public ManagedConnection createManagedConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
-        log.info("createManagedConnection(...)");
+        log.debug("createManagedConnection(...)");
         ensureMergedProducerProperties();
         return new KafkaManagedConnection(mergedProducerProperties, clientId, isUsingTransactions(), transactionIdPrefix);
     }

@@ -135,7 +135,7 @@ public class KafkaManagedConnection<K, V>
 
     KafkaManagedConnection(Properties producerProperties, String clientId, boolean usingTransactions, String transactionIdPrefix)
             throws ResourceException {
-        log.info("new KafkaManagedConnection(...)");
+        log.debug("new KafkaManagedConnection(...)");
 
         producerProperties = (Properties) producerProperties.clone();
         if(transactionIdPrefix != null && !transactionIdPrefix.isEmpty()) {
@@ -143,14 +143,14 @@ public class KafkaManagedConnection<K, V>
                     + "-" + getServerName()
                     + "-" + KafkaTransactionIdSequence.getInstance().getTransactionIdSequence().incrementAndGet();
 
-            log.info("ProducerConfig.TRANSACTIONAL_ID_CONFIG = " + transactionId);
+            log.debug("ProducerConfig.TRANSACTIONAL_ID_CONFIG = " + transactionId);
             producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
         }
 
         // To compensate for InstanceAlreadyExistsException in KafkaProducer MBean registration:
         //      https://www.baeldung.com/kafka-instancealreadyexistsexception
         var clientIdConfig = clientId + "-" + UUID.randomUUID();
-        log.info("ProducerConfig.CLIENT_ID_CONFIG = " + clientIdConfig);
+        log.debug("ProducerConfig.CLIENT_ID_CONFIG = " + clientIdConfig);
         producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
         
         producer = new KafkaProducer<>(producerProperties);
@@ -166,7 +166,7 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public Object getConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
-        log.info("getConnection(...)");
+        log.debug("getConnection(...)");
 
         var conn = new KafkaConnectionImpl<>(this);
         connectionHandles.add(conn);
@@ -175,7 +175,7 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public void destroy() throws ResourceException {
-        log.info("destroy()");
+        log.debug("destroy()");
 
         producer.close();
         producer = null;
@@ -183,7 +183,7 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public void cleanup() throws ResourceException {
-        log.info("cleanup()");
+        log.debug("cleanup()");
 
         for (KafkaConnectionImpl<K, V> conn : connectionHandles) {
             conn.setRealConn(null);
@@ -193,7 +193,7 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public void associateConnection(Object connection) throws ResourceException {
-        log.info("associateConnection(...)");
+        log.debug("associateConnection(...)");
 
         if(connection instanceof KafkaConnectionImpl conn) {
             conn.setRealConn(this);
@@ -203,14 +203,14 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public void addConnectionEventListener(ConnectionEventListener listener) {
-        log.info("addConnectionEventListener(...)");
+        log.debug("addConnectionEventListener(...)");
 
         listeners.add(listener);
     }
 
     @Override
     public void removeConnectionEventListener(ConnectionEventListener listener) {
-        log.info("removeConnectionEventListener(...)");
+        log.debug("removeConnectionEventListener(...)");
 
         listeners.remove(listener);
     }
@@ -222,7 +222,7 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public LocalTransaction getLocalTransaction() throws ResourceException {
-        log.info("getLocalTransaction()");
+        log.debug("getLocalTransaction()");
         return localTransaction;
     }
 
@@ -243,35 +243,35 @@ public class KafkaManagedConnection<K, V>
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record) {
-        log.info("send(ProducerRecord record)");
+        log.debug("send(ProducerRecord record)");
 
         return producer.send(record);
     }
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
-        log.info("send(ProducerRecord record, Callback callback)");
+        log.debug("send(ProducerRecord record, Callback callback)");
 
         return producer.send(record,callback);
     }
 
     @Override
     public void flush() {
-        log.info("flush()");
+        log.debug("flush()");
 
         producer.flush();
     }
 
     @Override
     public List<PartitionInfo> partitionsFor(String topic) {
-        log.info("partitionsFor(...)");
+        log.debug("partitionsFor(...)");
         
         return producer.partitionsFor(topic);
     }
 
     @Override
     public void close() throws Exception {
-        log.info("close()");
+        log.debug("close()");
 
         producer.close();
         
@@ -285,7 +285,7 @@ public class KafkaManagedConnection<K, V>
     }
     
     void remove(KafkaConnectionImpl<K, V> conn) {
-        log.info("remove(...)");
+        log.debug("remove(...)");
         
         connectionHandles.remove(conn);
         ConnectionEvent event = new ConnectionEvent(this, ConnectionEvent.CONNECTION_CLOSED);
