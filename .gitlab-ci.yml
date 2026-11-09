@@ -1,0 +1,61 @@
+image: gitlab.echothree.com:5050/containers/jdk-build-tools:latest
+
+include:
+  - template: Jobs/Dependency-Scanning.v2.gitlab-ci.yml
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # An open merge request already gets a pipeline for each push.
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH || $CI_COMMIT_TAG'
+
+stages:
+  - build
+  - test
+
+variables:
+  MAVEN_REPO_LOCAL: "$CI_PROJECT_DIR/.m2/repository"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version -Dmaven.repo.local=$MAVEN_REPO_LOCAL"
+  FF_NETWORK_PER_BUILD: "true"
+  AST_ENABLE_MR_PIPELINES: "true"
+  GITLAB_ADVANCED_SAST_ENABLED: "true"
+  # Resolve dependencies in the build container, which owns the Maven cache.
+  DS_DISABLED_RESOLUTION_JOBS: "maven"
+  DS_ENABLE_MANIFEST_FALLBACK: "false"
+
+cache:
+  key:
+    files:
+      - pom.xml
+      - Kafka/KafkaJCAAPI/pom.xml
+  paths:
+    - .m2/repository/
+
+build:
+  stage: build
+  interruptible: true
+  script:
+    # Keep graph generation in the same reactor as verify so sibling artifacts resolve.
+    - mvn $MAVEN_CLI_OPTS --no-transfer-progress clean verify org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree -DoutputType=json -DoutputFile=maven.graph.json
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - Kafka/*/target/surefire-reports/TEST-*.xml
+    paths:
+      - Kafka/*/target/
+      - maven.graph.json
+      - Kafka/*/maven.graph.json
+    expire_in: 1 week
+
+dependency-scanning:
+  dependencies:
+    - build
+  # Each graph sits beside its module's pom.xml in the build artifacts.
+  cache: []
