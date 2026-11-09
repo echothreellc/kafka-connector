@@ -49,7 +49,7 @@ build:
       junit:
         - Kafka/*/target/surefire-reports/TEST-*.xml
     paths:
-      - Kafka/*/target/
+      - Kafka/KafkaRAR/target/kafka-rar-1.0.0.rar
       - maven.graph.json
       - Kafka/*/maven.graph.json
     expire_in: 1 week
