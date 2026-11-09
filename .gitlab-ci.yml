@@ -55,10 +55,6 @@ build:
     expire_in: 1 week
 
 dependency-scanning:
-  variables:
-    # Match the default Maven reactor; the examples profile is not built in CI.
-    # Preserve the analyzer's default exclusions when adding the example modules.
-    DS_EXCLUDED_PATHS: "**/spec,**/test,**/tests,**/tmp,**/node_modules,**/.bundle,**/vendor,**/.git,Kafka/KafkaExample/**,Kafka/kafka-rest-example/**"
   dependencies:
     - build
   # Each graph sits beside its module's pom.xml in the build artifacts.

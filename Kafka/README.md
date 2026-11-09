@@ -1,16 +1,15 @@
 # Apache Kafka
 
-These modules form the basis of the Apache Kafka JCA connector. The code is in three modules
-* KafkaExample is an EJB jar module that shows a Timer Bean which sends a message periodically and an MDB that receives the message
-* KafkaRAR is the bulk of the JCA code and the jar file which must be used as a provided dependency for any code using the JCA module
-* KafkaRARPackaging is a maven module that assembles the rar file. The rar file should be deployed to your container.
+These modules form the basis of the Apache Kafka JCA connector:
+* KafkaJCAAPI contains the JCA connector code and produces the jar used as a provided dependency by applications.
+* KafkaRAR assembles the resource adapter archive for deployment to your container.
 
 To use the JCA adapter the KafkaRAR-<version>.rar should be deployed to your application server.
 
 To deploy the JCA adapter on Payara Micro use the following commands.
 
 ```shell
-java -jar payara-micro.jar --deploy kafka-rar-0.1.0.rar --deploy kafka-example-0.1.0.jar
+java -jar payara-micro.jar --deploy kafka-rar-1.0.0.rar
 ```
 
 To deploy independently on Payara Server ensure the Connector Classloading Policy os set to GLOBAL in the Connector Service of your instance configuration.
@@ -68,7 +67,7 @@ than polling for records. All records from the poll are processed by a single MD
 
 ### Example MDB
 
-The KafkaExample module shows an example MDB that receives messages from a Kafka topic.
+The following example shows an MDB that receives messages from a Kafka topic.
 To receive messages you must implement the KafkaListener interface. 
 ```java
     public class KafkaMDB implements KafkaListener  

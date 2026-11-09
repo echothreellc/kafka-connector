@@ -214,12 +214,5 @@
                 </plugins>
             </build>
         </profile>
-        <profile>
-            <id>examples</id>
-            <modules>
-                <module>Kafka/KafkaExample</module>
-                <module>Kafka/kafka-rest-example</module>
-            </modules>
-        </profile>
     </profiles>
 </project>
