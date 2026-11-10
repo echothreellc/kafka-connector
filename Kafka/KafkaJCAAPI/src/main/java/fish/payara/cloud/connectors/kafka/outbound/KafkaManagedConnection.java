@@ -95,7 +95,7 @@ public class KafkaManagedConnection<K, V>
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
     private Producer<K, V> producer;
-    private LocalTransaction localTransaction;
+    private final KafkaLocalTransaction<K, V> localTransaction;
     
     private final List<ConnectionEventListener> listeners = new CopyOnWriteArrayList<>();
     private final HashSet<KafkaConnectionImpl<K, V>> connectionHandles = new HashSet<>();
@@ -111,7 +111,7 @@ public class KafkaManagedConnection<K, V>
     KafkaManagedConnection(Producer<K, V> producer, boolean usingTransactions) {
         this.producer = producer;
         this.usingTransactions = usingTransactions;
-        localTransaction = new KafkaLocalTransaction<>(producer, this::reportProducerFailure);
+        localTransaction = new KafkaLocalTransaction<>(producer, this);
     }
 
     // For getCandidateInetAddress() & getLocalHostInetAddress():
@@ -193,7 +193,7 @@ public class KafkaManagedConnection<K, V>
         producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
         
         producer = producerFactory.apply(producerProperties);
-        localTransaction = new KafkaLocalTransaction<>(producer, this::reportProducerFailure);
+        localTransaction = new KafkaLocalTransaction<>(producer, this);
 
         if(usingTransactions) {
             try {
@@ -216,6 +216,9 @@ public class KafkaManagedConnection<K, V>
     public Object getConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
         log.debug("getConnection(...)");
 
+        if (!isUsable()) {
+            throw new ResourceException("Kafka connection is closed or has failed");
+        }
         var conn = new KafkaConnectionImpl<>(this);
         connectionHandles.add(conn);
         return conn;
@@ -234,10 +237,16 @@ public class KafkaManagedConnection<K, V>
     public void cleanup() throws ResourceException {
         log.debug("cleanup()");
 
-        for (KafkaConnectionImpl<K, V> conn : connectionHandles) {
-            conn.setRealConn(null);
+        try {
+            if (usingTransactions && !closed) {
+                localTransaction.cleanup();
+            }
+        } finally {
+            for (KafkaConnectionImpl<K, V> conn : connectionHandles) {
+                conn.setRealConn(null);
+            }
+            connectionHandles.clear();
         }
-        connectionHandles.clear();
     }
 
     @Override
@@ -272,6 +281,12 @@ public class KafkaManagedConnection<K, V>
     @Override
     public LocalTransaction getLocalTransaction() throws ResourceException {
         log.debug("getLocalTransaction()");
+        if (!usingTransactions) {
+            throw new NotSupportedException("Kafka transactions are not enabled for this connection");
+        }
+        if (!isUsable()) {
+            throw new ResourceException("Kafka connection is closed or has failed");
+        }
         return localTransaction;
     }
 
@@ -350,7 +365,6 @@ public class KafkaManagedConnection<K, V>
         producer.close();
         
         producer = null;
-        localTransaction = null;
     }
 
     @Override
@@ -359,14 +373,24 @@ public class KafkaManagedConnection<K, V>
     }
 
     boolean matches(KafkaManagedConnectionFactory factory, Subject subject, ConnectionRequestInfo requestInfo) {
-        return !closed && !connectionErrorReported.get()
+        return isUsable() && (!usingTransactions || localTransaction.isIdle())
                 && connectionFactory != null && connectionFactory.equals(factory)
                 && Objects.equals(connectionSubject, subject)
                 && Objects.equals(connectionRequestInfo, requestInfo);
     }
 
-    private void reportProducerFailure(Exception exception) {
-        if (!isFatalProducerFailure(exception) || !connectionErrorReported.compareAndSet(false, true)) {
+    boolean isUsable() {
+        return !closed && !connectionErrorReported.get();
+    }
+
+    void reportProducerFailure(Exception exception) {
+        if (isFatalProducerFailure(exception)) {
+            invalidateConnection(exception);
+        }
+    }
+
+    void invalidateConnection(Exception exception) {
+        if (!connectionErrorReported.compareAndSet(false, true)) {
             return;
         }
 

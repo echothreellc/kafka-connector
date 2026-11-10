@@ -259,11 +259,14 @@ public class KafkaManagedConnectionTest {
     }
 
     @Test(dataProvider = "transactionOperations")
-    public void fatalTransactionFailureNotifiesPool(String operation) {
+    public void fatalTransactionFailureNotifiesPool(String operation) throws Exception {
         try (MockProducer<String, String> producer = newProducer()) {
             producer.initTransactions();
-            producer.beginTransaction();
             KafkaManagedConnection<String, String> connection = new KafkaManagedConnection<>(producer, true);
+            var transaction = connection.getLocalTransaction();
+            if (!operation.equals("begin")) {
+                transaction.begin();
+            }
             PoolListener pool = new PoolListener();
             connection.addConnectionEventListener(pool);
             ProducerFencedException failure = new ProducerFencedException("Fenced");
@@ -271,16 +274,16 @@ public class KafkaManagedConnectionTest {
             producer.commitTransactionException = failure;
             producer.abortTransactionException = failure;
 
-            RuntimeException thrown = expectThrows(RuntimeException.class, () -> {
+            ResourceException thrown = expectThrows(ResourceException.class, () -> {
                 switch (operation) {
-                    case "begin" -> connection.getLocalTransaction().begin();
-                    case "commit" -> connection.getLocalTransaction().commit();
-                    case "rollback" -> connection.getLocalTransaction().rollback();
+                    case "begin" -> transaction.begin();
+                    case "commit" -> transaction.commit();
+                    case "rollback" -> transaction.rollback();
                     default -> throw new AssertionError(operation);
                 }
             });
 
-            assertSame(thrown, failure);
+            assertSame(thrown.getCause(), failure);
             assertPoolError(pool, connection, failure);
         }
     }
