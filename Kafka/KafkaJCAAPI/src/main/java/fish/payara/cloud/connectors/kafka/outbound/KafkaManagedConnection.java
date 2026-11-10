@@ -46,12 +46,13 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.Future;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.resource.NotSupportedException;
 import javax.resource.ResourceException;
 import javax.resource.spi.ConnectionEvent;
@@ -64,12 +65,20 @@ import javax.security.auth.Subject;
 import javax.transaction.xa.XAResource;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.errors.AuthorizationException;
+import org.apache.kafka.common.errors.ClusterAuthorizationException;
+import org.apache.kafka.common.errors.InvalidProducerEpochException;
+import org.apache.kafka.common.errors.OutOfOrderSequenceException;
+import org.apache.kafka.common.errors.ProducerFencedException;
+import org.apache.kafka.common.errors.TransactionalIdAuthorizationException;
+import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,12 +91,21 @@ public class KafkaManagedConnection<K, V>
 
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
     
-    private KafkaProducer<K, V> producer;
+    private Producer<K, V> producer;
     private LocalTransaction localTransaction;
     
-    private final List<ConnectionEventListener> listeners;
-    private final HashSet<KafkaConnectionImpl<K, V>> connectionHandles;
+    private final List<ConnectionEventListener> listeners = new CopyOnWriteArrayList<>();
+    private final HashSet<KafkaConnectionImpl<K, V>> connectionHandles = new HashSet<>();
+    private final AtomicBoolean connectionErrorReported = new AtomicBoolean();
+    private final boolean usingTransactions;
     private PrintWriter writer;
+
+    // Accept an initialized producer so lifecycle behavior can be tested without a broker.
+    KafkaManagedConnection(Producer<K, V> producer, boolean usingTransactions) {
+        this.producer = producer;
+        this.usingTransactions = usingTransactions;
+        localTransaction = new KafkaLocalTransaction<>(producer, this::reportProducerFailure);
+    }
 
     // For getCandidateInetAddress() & getLocalHostInetAddress():
     //     https://stackoverflow.com/questions/9481865/getting-the-ip-address-of-the-current-machine-using-java
@@ -137,6 +155,8 @@ public class KafkaManagedConnection<K, V>
             throws ResourceException {
         log.debug("new KafkaManagedConnection(...)");
 
+        this.usingTransactions = usingTransactions;
+
         producerProperties = (Properties) producerProperties.clone();
         if(transactionIdPrefix != null && !transactionIdPrefix.isEmpty()) {
             var transactionId = transactionIdPrefix
@@ -154,14 +174,11 @@ public class KafkaManagedConnection<K, V>
         producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
         
         producer = new KafkaProducer<>(producerProperties);
-        localTransaction = new KafkaLocalTransaction<>(producer);
+        localTransaction = new KafkaLocalTransaction<>(producer, this::reportProducerFailure);
 
         if(usingTransactions) {
             producer.initTransactions();
         }
-
-        listeners = new LinkedList<>();
-        connectionHandles = new HashSet<>();
     }
 
     @Override
@@ -245,28 +262,52 @@ public class KafkaManagedConnection<K, V>
     public Future<RecordMetadata> send(ProducerRecord<K, V> record) {
         log.debug("send(ProducerRecord record)");
 
-        return producer.send(record);
+        return send(record, null);
     }
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
         log.debug("send(ProducerRecord record, Callback callback)");
 
-        return producer.send(record,callback);
+        try {
+            // Always install a callback: failures must reach the pool even when callers
+            // use only the Future, or ignore the result entirely.
+            return producer.send(record, (metadata, exception) -> {
+                if (exception != null) {
+                    reportProducerFailure(exception);
+                }
+                if (callback != null) {
+                    callback.onCompletion(metadata, exception);
+                }
+            });
+        } catch (RuntimeException exception) {
+            reportProducerFailure(exception);
+            throw exception;
+        }
     }
 
     @Override
     public void flush() {
         log.debug("flush()");
 
-        producer.flush();
+        try {
+            producer.flush();
+        } catch (RuntimeException exception) {
+            reportProducerFailure(exception);
+            throw exception;
+        }
     }
 
     @Override
     public List<PartitionInfo> partitionsFor(String topic) {
         log.debug("partitionsFor(...)");
         
-        return producer.partitionsFor(topic);
+        try {
+            return producer.partitionsFor(topic);
+        } catch (RuntimeException exception) {
+            reportProducerFailure(exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -282,6 +323,42 @@ public class KafkaManagedConnection<K, V>
     @Override
     public Map<MetricName, ? extends Metric> metrics() throws ResourceException {
         return producer.metrics();
+    }
+
+    private void reportProducerFailure(Exception exception) {
+        if (!isFatalProducerFailure(exception) || !connectionErrorReported.compareAndSet(false, true)) {
+            return;
+        }
+
+        ConnectionEvent event = new ConnectionEvent(this, ConnectionEvent.CONNECTION_ERROR_OCCURRED, exception);
+        for (ConnectionEventListener listener : listeners) {
+            try {
+                listener.connectionErrorOccurred(event);
+            } catch (RuntimeException listenerFailure) {
+                // One listener must not hide the producer failure or prevent other
+                // listeners and the application's send callback from being notified.
+                log.warn("Connection listener failed while reporting a producer error", listenerFailure);
+            }
+        }
+    }
+
+    private boolean isFatalProducerFailure(Throwable exception) {
+        // A defunct Kafka producer wraps its original fatal error in KafkaException
+        // on subsequent calls, so inspect the cause chain as well.
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ProducerFencedException
+                    || cause instanceof InvalidProducerEpochException
+                    || cause instanceof UnsupportedVersionException
+                    || cause instanceof TransactionalIdAuthorizationException
+                    || cause instanceof ClusterAuthorizationException) {
+                return true;
+            }
+            if (usingTransactions && (cause instanceof OutOfOrderSequenceException
+                    || cause instanceof AuthorizationException)) {
+                return true;
+            }
+        }
+        return false;
     }
     
     void remove(KafkaConnectionImpl<K, V> conn) {

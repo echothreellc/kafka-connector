@@ -18,8 +18,9 @@ package fish.payara.cloud.connectors.kafka.outbound;
 
 import javax.resource.ResourceException;
 import javax.resource.spi.LocalTransaction;
+import java.util.function.Consumer;
 
-import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,12 +29,14 @@ public class KafkaLocalTransaction<K, V>
     
     private static final Logger log = LoggerFactory.getLogger(KafkaLocalTransaction.class);
 
-    private final KafkaProducer<K, V> producer;
+    private final Producer<K, V> producer;
+    private final Consumer<Exception> failureHandler;
 
-    KafkaLocalTransaction(KafkaProducer<K, V> producer) {
+    KafkaLocalTransaction(Producer<K, V> producer, Consumer<Exception> failureHandler) {
         log.debug("new KafkaLocalTransaction(...)");
 
         this.producer = producer;
+        this.failureHandler = failureHandler;
     }
 
     @Override
@@ -41,7 +44,12 @@ public class KafkaLocalTransaction<K, V>
             throws ResourceException {
         log.debug("begin()");
 
-        producer.beginTransaction();
+        try {
+            producer.beginTransaction();
+        } catch (RuntimeException exception) {
+            failureHandler.accept(exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -49,7 +57,12 @@ public class KafkaLocalTransaction<K, V>
             throws ResourceException {
         log.debug("commit()");
 
-        producer.commitTransaction();
+        try {
+            producer.commitTransaction();
+        } catch (RuntimeException exception) {
+            failureHandler.accept(exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -57,7 +70,12 @@ public class KafkaLocalTransaction<K, V>
             throws ResourceException {
         log.debug("rollback()");
 
-        producer.abortTransaction();
+        try {
+            producer.abortTransaction();
+        } catch (RuntimeException exception) {
+            failureHandler.accept(exception);
+            throw exception;
+        }
     }
 
 }
