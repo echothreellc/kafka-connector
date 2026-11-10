@@ -61,7 +61,7 @@ import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 class KafkaConnectionImpl<K, V>
         implements KafkaConnection<K, V> {
 
-    private KafkaManagedConnection<K, V> realConn;
+    private volatile KafkaManagedConnection<K, V> realConn;
 
     public KafkaConnectionImpl(KafkaManagedConnection<K, V> realConn) {
         this.realConn = realConn;
@@ -69,9 +69,9 @@ class KafkaConnectionImpl<K, V>
 
     @Override
     public void close() throws ResourceException {
-        checkValidity();
+        KafkaManagedConnection<K, V> connection = requireConnection();
         try {
-            realConn.remove(this);
+            connection.remove(this);
             realConn = null;
         } catch (Exception ex) {
             throw new ResourceException(ex);
@@ -80,32 +80,27 @@ class KafkaConnectionImpl<K, V>
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record) throws ResourceException {
-        checkValidity();
-        return realConn.send(record);
+        return requireConnection().send(record);
     }
 
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) throws ResourceException {
-        checkValidity();
-        return realConn.send(record, callback);
+        return requireConnection().send(record, callback);
     }
 
     @Override
     public void flush() throws ResourceException {
-        checkValidity();
-        realConn.flush();
+        requireConnection().flush();
     }
 
     @Override
     public List<PartitionInfo> partitionsFor(String topic) throws ResourceException {
-        checkValidity();
-        return realConn.partitionsFor(topic);
+        return requireConnection().partitionsFor(topic);
     }
 
     @Override
     public Map<MetricName, ? extends Metric> metrics() throws ResourceException {
-        checkValidity();
-        return realConn.metrics();
+        return requireConnection().metrics();
     }
     
     KafkaManagedConnection<K, V> getRealConn() {
@@ -116,10 +111,12 @@ class KafkaConnectionImpl<K, V>
         this.realConn = realConn;
     }
 
-    private void checkValidity() throws ResourceException {
-        if (realConn == null) {
+    private KafkaManagedConnection<K, V> requireConnection() throws ResourceException {
+        KafkaManagedConnection<K, V> connection = realConn;
+        if (connection == null) {
             throw new ResourceException("Not Associated with a Kafka Producer");
         }
+        return connection;
     }
 
 }

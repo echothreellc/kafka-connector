@@ -4,6 +4,7 @@ import java.security.Principal;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import javax.resource.spi.ConnectionRequestInfo;
+import javax.resource.ResourceException;
 import javax.security.auth.Subject;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -104,7 +105,8 @@ public class KafkaManagedConnectionFactoryTest {
             }
             try {
                 if (closeFails) {
-                    expectThrows(IllegalStateException.class, () -> close(connection, operation));
+                    ResourceException failure = expectThrows(ResourceException.class, () -> close(connection, operation));
+                    assertSame(failure.getCause(), producer.closeException);
                 } else {
                     close(connection, operation);
                 }

@@ -93,8 +93,9 @@ public class KafkaManagedConnection<K, V>
         implements ManagedConnection, KafkaConnection<K, V> {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaManagedConnection.class);
+    private static final Duration PRODUCER_CLOSE_TIMEOUT = Duration.ofSeconds(30);
     
-    private Producer<K, V> producer;
+    private final Producer<K, V> producer;
     private final KafkaLocalTransaction<K, V> localTransaction;
     
     private final List<ConnectionEventListener> listeners = new CopyOnWriteArrayList<>();
@@ -216,21 +217,21 @@ public class KafkaManagedConnection<K, V>
     public Object getConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
         log.debug("getConnection(...)");
 
-        if (!isUsable()) {
-            throw new ResourceException("Kafka connection is closed or has failed");
+        synchronized (connectionHandles) {
+            if (!isUsable()) {
+                throw new ResourceException("Kafka connection is closed or has failed");
+            }
+            var conn = new KafkaConnectionImpl<>(this);
+            connectionHandles.add(conn);
+            return conn;
         }
-        var conn = new KafkaConnectionImpl<>(this);
-        connectionHandles.add(conn);
-        return conn;
     }
 
     @Override
     public void destroy() throws ResourceException {
         log.debug("destroy()");
 
-        closed = true;
-        producer.close();
-        producer = null;
+        shutdown();
     }
 
     @Override
@@ -242,10 +243,7 @@ public class KafkaManagedConnection<K, V>
                 localTransaction.cleanup();
             }
         } finally {
-            for (KafkaConnectionImpl<K, V> conn : connectionHandles) {
-                conn.setRealConn(null);
-            }
-            connectionHandles.clear();
+            invalidateConnectionHandles();
         }
     }
 
@@ -253,9 +251,14 @@ public class KafkaManagedConnection<K, V>
     public void associateConnection(Object connection) throws ResourceException {
         log.debug("associateConnection(...)");
 
-        if(connection instanceof KafkaConnectionImpl conn) {
-            conn.setRealConn(this);
-            connectionHandles.add(conn);
+        synchronized (connectionHandles) {
+            if (!isUsable()) {
+                throw new ResourceException("Kafka connection is closed or has failed");
+            }
+            if(connection instanceof KafkaConnectionImpl conn) {
+                conn.setRealConn(this);
+                connectionHandles.add(conn);
+            }
         }
     }
 
@@ -316,6 +319,7 @@ public class KafkaManagedConnection<K, V>
     public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
         log.debug("send(ProducerRecord record, Callback callback)");
 
+        checkOpen();
         try {
             // Always install a callback: failures must reach the pool even when callers
             // use only the Future, or ignore the result entirely.
@@ -337,6 +341,7 @@ public class KafkaManagedConnection<K, V>
     public void flush() {
         log.debug("flush()");
 
+        checkOpen();
         try {
             producer.flush();
         } catch (RuntimeException exception) {
@@ -349,6 +354,7 @@ public class KafkaManagedConnection<K, V>
     public List<PartitionInfo> partitionsFor(String topic) {
         log.debug("partitionsFor(...)");
         
+        checkOpen();
         try {
             return producer.partitionsFor(topic);
         } catch (RuntimeException exception) {
@@ -358,18 +364,53 @@ public class KafkaManagedConnection<K, V>
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() throws ResourceException {
         log.debug("close()");
 
-        closed = true;
-        producer.close();
-        
-        producer = null;
+        shutdown();
     }
 
     @Override
     public Map<MetricName, ? extends Metric> metrics() throws ResourceException {
+        checkOpen();
         return producer.metrics();
+    }
+
+    private void shutdown() throws ResourceException {
+        synchronized (connectionHandles) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            invalidateConnectionHandles();
+        }
+
+        // Kafka may invoke send callbacks during close. Do not hold the handle
+        // monitor while waiting, since a callback can ask the pool to destroy us.
+        try {
+            producer.close(PRODUCER_CLOSE_TIMEOUT);
+        } catch (RuntimeException exception) {
+            throw new ResourceException("Unable to close Kafka producer", exception);
+        }
+    }
+
+    private void invalidateConnectionHandles() {
+        synchronized (connectionHandles) {
+            for (KafkaConnectionImpl<K, V> handle : connectionHandles) {
+                // Reassociation can leave an old registration behind. Only detach
+                // handles that still belong to this physical connection.
+                if (handle.getRealConn() == this) {
+                    handle.setRealConn(null);
+                }
+            }
+            connectionHandles.clear();
+        }
+    }
+
+    private void checkOpen() {
+        if (closed) {
+            throw new IllegalStateException("Kafka connection is closed");
+        }
     }
 
     boolean matches(KafkaManagedConnectionFactory factory, Subject subject, ConnectionRequestInfo requestInfo) {
@@ -428,7 +469,9 @@ public class KafkaManagedConnection<K, V>
     void remove(KafkaConnectionImpl<K, V> conn) {
         log.debug("remove(...)");
         
-        connectionHandles.remove(conn);
+        synchronized (connectionHandles) {
+            connectionHandles.remove(conn);
+        }
         ConnectionEvent event = new ConnectionEvent(this, ConnectionEvent.CONNECTION_CLOSED);
         event.setConnectionHandle(conn);
         for (ConnectionEventListener listener : listeners) {
