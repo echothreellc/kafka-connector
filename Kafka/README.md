@@ -147,3 +147,15 @@ This connection factory can then be injected into any JavaEE component;
     @Resource(lookup="java:comp/env/KafkaConnectionFactory")
     KafkaConnectionFactory factory;
 ```
+
+### Transaction IDs
+
+When `transactionIdPrefix` is configured, each physical producer receives a transaction ID
+in the form `<prefix>-<hostname>-<UUID>`. The UUID avoids reuse caused by separate JVMs
+or deployments starting their counters on the same host. The ID stays unchanged while
+that physical producer is reused by the connection pool.
+
+A replacement producer, including one created after a restart, receives a fresh ID.
+The prefix therefore does not provide a stable fencing identity across restarts.
+After an abrupt failure, unfinished transactions may remain until Kafka aborts them
+according to `transaction.timeout.ms`; see the [Kafka producer configuration](https://kafka.apache.org/44/configuration/producer-configs/).

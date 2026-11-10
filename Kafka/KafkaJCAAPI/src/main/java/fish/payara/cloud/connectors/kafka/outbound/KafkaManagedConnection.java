@@ -181,7 +181,7 @@ public class KafkaManagedConnection<K, V>
         if(transactionIdPrefix != null && !transactionIdPrefix.isEmpty()) {
             var transactionId = transactionIdPrefix
                     + "-" + getServerName()
-                    + "-" + KafkaTransactionIdSequence.getInstance().getTransactionIdSequence().incrementAndGet();
+                    + "-" + UUID.randomUUID();
 
             log.debug("ProducerConfig.TRANSACTIONAL_ID_CONFIG = " + transactionId);
             producerProperties.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId);
