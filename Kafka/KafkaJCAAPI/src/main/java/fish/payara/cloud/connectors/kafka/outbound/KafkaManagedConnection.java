@@ -400,7 +400,7 @@ public class KafkaManagedConnection<K, V>
                 // Reassociation can leave an old registration behind. Only detach
                 // handles that still belong to this physical connection.
                 if (handle.getRealConn() == this) {
-                    handle.setRealConn(null);
+                    handle.detachFrom(this);
                 }
             }
             connectionHandles.clear();

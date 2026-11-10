@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -278,6 +279,51 @@ public class KafkaTransactionLifecycleTest {
             assertEquals(fixture.producer.abortCalls, 0);
             fixture.assertNotReusable();
         } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void overlappingTransactionOperationsAreRejectedWithoutDisturbingCommit() throws Exception {
+        var executor = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "transaction-operation-test");
+            thread.setDaemon(true);
+            return thread;
+        });
+        CountDownLatch commitStarted = new CountDownLatch(1);
+        CountDownLatch finishCommit = new CountDownLatch(1);
+        try (Fixture fixture = new Fixture()) {
+            fixture.transaction.begin();
+            fixture.producer.duringCommit = () -> {
+                commitStarted.countDown();
+                try {
+                    assertTrue(finishCommit.await(5, TimeUnit.SECONDS));
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(exception);
+                }
+            };
+            var commit = executor.submit(() -> {
+                fixture.transaction.commit();
+                return null;
+            });
+            try {
+                assertTrue(commitStarted.await(5, TimeUnit.SECONDS));
+                expectThrows(ResourceException.class, fixture.transaction::begin);
+                expectThrows(ResourceException.class, fixture.transaction::commit);
+                expectThrows(ResourceException.class, fixture.transaction::rollback);
+                fixture.assertNotReusable();
+            } finally {
+                finishCommit.countDown();
+            }
+            commit.get(5, TimeUnit.SECONDS);
+            assertEquals(fixture.producer.beginCalls, 1);
+            assertEquals(fixture.producer.commitCalls, 1);
+            assertEquals(fixture.producer.abortCalls, 0);
+            fixture.assertReusable();
+            assertTrue(fixture.errors.isEmpty());
+        } finally {
+            finishCommit.countDown();
             executor.shutdownNow();
         }
     }

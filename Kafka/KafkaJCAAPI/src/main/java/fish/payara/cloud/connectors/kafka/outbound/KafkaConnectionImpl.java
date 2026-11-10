@@ -42,6 +42,7 @@ package fish.payara.cloud.connectors.kafka.outbound;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.resource.ResourceException;
 
@@ -61,18 +62,25 @@ import fish.payara.cloud.connectors.kafka.api.KafkaConnection;
 class KafkaConnectionImpl<K, V>
         implements KafkaConnection<K, V> {
 
-    private volatile KafkaManagedConnection<K, V> realConn;
+    private final AtomicReference<KafkaManagedConnection<K, V>> realConn;
+    // Logical close and reassociation share this monitor; pool calls happen outside it.
+    private boolean closed;
 
     public KafkaConnectionImpl(KafkaManagedConnection<K, V> realConn) {
-        this.realConn = realConn;
+        this.realConn = new AtomicReference<>(realConn);
     }
 
     @Override
     public void close() throws ResourceException {
-        KafkaManagedConnection<K, V> connection = requireConnection();
+        KafkaManagedConnection<K, V> connection;
+        synchronized (this) {
+            connection = requireConnection();
+            closed = true;
+            realConn.set(null);
+        }
+        // Detach before calling the pool, without holding the handle monitor.
         try {
             connection.remove(this);
-            realConn = null;
         } catch (Exception ex) {
             throw new ResourceException(ex);
         }
@@ -104,15 +112,23 @@ class KafkaConnectionImpl<K, V>
     }
     
     KafkaManagedConnection<K, V> getRealConn() {
-        return realConn;
+        return realConn.get();
     }
 
-    void setRealConn(KafkaManagedConnection<K, V> realConn) {
-        this.realConn = realConn;
+    synchronized void setRealConn(KafkaManagedConnection<K, V> connection) throws ResourceException {
+        if (closed) {
+            throw new ResourceException("Connection handle has been closed");
+        }
+        realConn.set(connection);
+    }
+
+    void detachFrom(KafkaManagedConnection<K, V> owner) {
+        // An old owner's cleanup must not erase a concurrent reassociation.
+        realConn.compareAndSet(owner, null);
     }
 
     private KafkaManagedConnection<K, V> requireConnection() throws ResourceException {
-        KafkaManagedConnection<K, V> connection = realConn;
+        KafkaManagedConnection<K, V> connection = realConn.get();
         if (connection == null) {
             throw new ResourceException("Not Associated with a Kafka Producer");
         }
