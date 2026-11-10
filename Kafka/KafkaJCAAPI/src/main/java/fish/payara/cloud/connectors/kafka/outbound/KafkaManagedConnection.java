@@ -49,6 +49,7 @@ import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -63,10 +64,10 @@ import javax.resource.spi.ConnectionRequestInfo;
 import javax.resource.spi.LocalTransaction;
 import javax.resource.spi.ManagedConnection;
 import javax.resource.spi.ManagedConnectionMetaData;
+import javax.resource.spi.TransactionSupport.TransactionSupportLevel;
 import javax.security.auth.Subject;
 import javax.transaction.xa.XAResource;
 import org.apache.kafka.clients.producer.Callback;
-import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -100,6 +101,10 @@ public class KafkaManagedConnection<K, V>
     private final HashSet<KafkaConnectionImpl<K, V>> connectionHandles = new HashSet<>();
     private final AtomicBoolean connectionErrorReported = new AtomicBoolean();
     private final boolean usingTransactions;
+    private volatile boolean closed;
+    private KafkaManagedConnectionFactory connectionFactory;
+    private Subject connectionSubject;
+    private ConnectionRequestInfo connectionRequestInfo;
     private PrintWriter writer;
 
     // Accept an initialized producer so lifecycle behavior can be tested without a broker.
@@ -153,9 +158,15 @@ public class KafkaManagedConnection<K, V>
         }
     }
 
-    KafkaManagedConnection(Properties producerProperties, String clientId, boolean usingTransactions, String transactionIdPrefix)
+    KafkaManagedConnection(KafkaManagedConnectionFactory factory, Subject subject, ConnectionRequestInfo requestInfo,
+            Function<Properties, Producer<K, V>> producerFactory)
             throws ResourceException {
-        this(producerProperties, clientId, usingTransactions, transactionIdPrefix, KafkaProducer::new);
+        this(factory.getMergedProducerProperties(), factory.getClientId(),
+                factory.getTransactionSupport() == TransactionSupportLevel.LocalTransaction,
+                factory.getTransactionIdPrefix(), producerFactory);
+        connectionFactory = factory;
+        connectionSubject = subject;
+        connectionRequestInfo = requestInfo;
     }
 
     KafkaManagedConnection(Properties producerProperties, String clientId, boolean usingTransactions,
@@ -214,6 +225,7 @@ public class KafkaManagedConnection<K, V>
     public void destroy() throws ResourceException {
         log.debug("destroy()");
 
+        closed = true;
         producer.close();
         producer = null;
     }
@@ -334,6 +346,7 @@ public class KafkaManagedConnection<K, V>
     public void close() throws Exception {
         log.debug("close()");
 
+        closed = true;
         producer.close();
         
         producer = null;
@@ -343,6 +356,13 @@ public class KafkaManagedConnection<K, V>
     @Override
     public Map<MetricName, ? extends Metric> metrics() throws ResourceException {
         return producer.metrics();
+    }
+
+    boolean matches(KafkaManagedConnectionFactory factory, Subject subject, ConnectionRequestInfo requestInfo) {
+        return !closed && !connectionErrorReported.get()
+                && connectionFactory != null && connectionFactory.equals(factory)
+                && Objects.equals(connectionSubject, subject)
+                && Objects.equals(connectionRequestInfo, requestInfo);
     }
 
     private void reportProducerFailure(Exception exception) {

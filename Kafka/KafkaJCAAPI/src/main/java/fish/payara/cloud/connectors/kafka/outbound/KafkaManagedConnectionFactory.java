@@ -55,6 +55,7 @@ import javax.resource.spi.TransactionSupport;
 import javax.security.auth.Subject;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.KafkaProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -386,13 +387,23 @@ public class KafkaManagedConnectionFactory implements ManagedConnectionFactory, 
     @Override
     public ManagedConnection createManagedConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
         log.debug("createManagedConnection(...)");
+        return new KafkaManagedConnection<>(this, subject, cxRequestInfo, KafkaProducer::new);
+    }
+
+    Properties getMergedProducerProperties() {
         ensureMergedProducerProperties();
-        return new KafkaManagedConnection(mergedProducerProperties, clientId, isUsingTransactions(), transactionIdPrefix);
+        return mergedProducerProperties;
     }
 
     @Override
     public ManagedConnection matchManagedConnections(Set connectionSet, Subject subject, ConnectionRequestInfo cxRequestInfo) throws ResourceException {
-        return (ManagedConnection) connectionSet.toArray()[0];
+        for (Object candidate : connectionSet) {
+            if (candidate instanceof KafkaManagedConnection<?, ?> connection
+                    && connection.matches(this, subject, cxRequestInfo)) {
+                return connection;
+            }
+        }
+        return null;
     }
 
     @Override
