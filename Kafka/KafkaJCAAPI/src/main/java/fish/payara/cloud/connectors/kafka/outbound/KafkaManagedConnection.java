@@ -45,6 +45,7 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import javax.resource.NotSupportedException;
 import javax.resource.ResourceException;
 import javax.resource.spi.ConnectionEvent;
@@ -153,6 +155,12 @@ public class KafkaManagedConnection<K, V>
 
     KafkaManagedConnection(Properties producerProperties, String clientId, boolean usingTransactions, String transactionIdPrefix)
             throws ResourceException {
+        this(producerProperties, clientId, usingTransactions, transactionIdPrefix, KafkaProducer::new);
+    }
+
+    KafkaManagedConnection(Properties producerProperties, String clientId, boolean usingTransactions,
+            String transactionIdPrefix, Function<Properties, Producer<K, V>> producerFactory)
+            throws ResourceException {
         log.debug("new KafkaManagedConnection(...)");
 
         this.usingTransactions = usingTransactions;
@@ -173,11 +181,23 @@ public class KafkaManagedConnection<K, V>
         log.debug("ProducerConfig.CLIENT_ID_CONFIG = " + clientIdConfig);
         producerProperties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, clientIdConfig);
         
-        producer = new KafkaProducer<>(producerProperties);
+        producer = producerFactory.apply(producerProperties);
         localTransaction = new KafkaLocalTransaction<>(producer, this::reportProducerFailure);
 
         if(usingTransactions) {
-            producer.initTransactions();
+            try {
+                producer.initTransactions();
+            } catch (RuntimeException initializationFailure) {
+                ResourceException failure = new ResourceException(
+                        "Unable to initialize Kafka producer transactions", initializationFailure);
+                try {
+                    // Initialization failed, so do not wait for pending work to finish.
+                    producer.close(Duration.ZERO);
+                } catch (RuntimeException closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+                throw failure;
+            }
         }
     }
 

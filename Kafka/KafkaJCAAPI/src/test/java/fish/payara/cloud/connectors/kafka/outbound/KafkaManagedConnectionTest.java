@@ -1,9 +1,12 @@
 package fish.payara.cloud.connectors.kafka.outbound;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.resource.ResourceException;
 import javax.resource.spi.ConnectionEvent;
 import javax.resource.spi.ConnectionEventListener;
 import org.apache.kafka.clients.producer.MockProducer;
@@ -25,6 +28,7 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
@@ -32,6 +36,72 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
 public class KafkaManagedConnectionTest {
+
+    @DataProvider(name = "initializationFailures")
+    public Object[][] initializationFailures() {
+        return new Object[][] {
+            {new TimeoutException("Transaction initialization timed out")},
+            {new ProducerFencedException("Producer was fenced during initialization")}
+        };
+    }
+
+    @Test(dataProvider = "initializationFailures")
+    public void failedTransactionInitializationClosesProducer(RuntimeException failure) {
+        InitializationTrackingProducer producer = new InitializationTrackingProducer();
+        producer.initTransactionException = failure;
+        try {
+            ResourceException thrown = expectThrows(ResourceException.class,
+                    () -> new KafkaManagedConnection<>(new Properties(), "test", true, "", properties -> producer));
+
+            assertTrue(producer.closed(), "A producer must not leak when transaction initialization fails");
+            assertEquals(producer.closeTimeout, Duration.ZERO);
+            assertSame(thrown.getCause(), failure);
+        } finally {
+            producer.close();
+        }
+    }
+
+    @Test
+    public void initializationFailureIsPreservedWhenCloseAlsoFails() {
+        IllegalStateException closeFailure = new IllegalStateException("Close failed");
+        InitializationTrackingProducer producer = new InitializationTrackingProducer() {
+            @Override
+            public void close(Duration timeout) {
+                super.close(timeout);
+                throw closeFailure;
+            }
+        };
+        TimeoutException initializationFailure = new TimeoutException("Transaction initialization timed out");
+        producer.initTransactionException = initializationFailure;
+
+        ResourceException thrown = expectThrows(ResourceException.class,
+                () -> new KafkaManagedConnection<>(new Properties(), "test", true, "", properties -> producer));
+
+        assertSame(thrown.getCause(), initializationFailure);
+        assertEquals(thrown.getSuppressed().length, 1);
+        assertSame(thrown.getSuppressed()[0], closeFailure);
+        assertEquals(producer.closeTimeout, Duration.ZERO);
+    }
+
+    @DataProvider(name = "transactionModes")
+    public Object[][] transactionModes() {
+        return new Object[][] {{true}, {false}};
+    }
+
+    @Test(dataProvider = "transactionModes")
+    public void successfulConstructionKeepsProducerOpen(boolean transactional) throws Exception {
+        InitializationTrackingProducer producer = new InitializationTrackingProducer();
+        KafkaManagedConnection<String, String> connection = new KafkaManagedConnection<>(
+                new Properties(), "test", transactional, "", properties -> producer);
+        try {
+            assertEquals(producer.initializationCalls, transactional ? 1 : 0);
+            assertEquals(producer.transactionInitialized(), transactional);
+            assertFalse(producer.closed());
+        } finally {
+            connection.destroy();
+        }
+        assertTrue(producer.closed());
+    }
 
     @DataProvider(name = "fatalFailures")
     public Object[][] fatalFailures() {
@@ -260,6 +330,27 @@ public class KafkaManagedConnectionTest {
 
     private static MockProducer<String, String> newProducer() {
         return new MockProducer<>(false, null, new StringSerializer(), new StringSerializer());
+    }
+
+    private static class InitializationTrackingProducer extends MockProducer<String, String> {
+        private int initializationCalls;
+        private Duration closeTimeout;
+
+        InitializationTrackingProducer() {
+            super(false, null, new StringSerializer(), new StringSerializer());
+        }
+
+        @Override
+        public void initTransactions() {
+            initializationCalls++;
+            super.initTransactions();
+        }
+
+        @Override
+        public void close(Duration timeout) {
+            closeTimeout = timeout;
+            super.close(timeout);
+        }
     }
 
     private static void assertPoolError(PoolListener pool, KafkaManagedConnection<?, ?> connection,
